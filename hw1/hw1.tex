@@ -1,0 +1,207 @@
+% Search for all the places that say "PUT SOMETHING HERE".
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,textcomp,amssymb,geometry,graphicx}
+
+\def\Name{Alexander Tom (ID: 20964861)}  % Your name
+\def\Login{ee122-ki} % Your login
+\def\HomeworkNum{1}
+
+\title{CS170--Spring 2013 --- Solutions to Homework \HomeworkNum}
+\author{\Name, \texttt{\Login}}
+\markboth{CS170--Spring 2013 Homework \HomeworkNum \Name}{CS170--Spring
+    2013 Homework 11 \Name, \texttt{\Login}}
+\pagestyle{myheadings}
+
+\begin{document}
+\maketitle
+ 
+\section*{1.}
+\begin{itemize}
+    \item[(1.)]
+        \textbf{\underline{4.4 ms}} \newline
+        Time to transmit the packet:
+        $$t_p = 1200 bytes \times \frac{8 bits/byte}{4 Mbits/sec} = 2.4 ms$$
+        Latency:
+        $$l = \frac{600 km}{3 \times 10 ^ 8 m/s} = 2.0ms$$
+        Total Time:
+        $$l + t_p = 4.4ms$$
+    \item[(2.)]
+        \begin{itemize}
+            \item[(a.)]
+                \textbf{\underline{1060 ms}} \newline
+                $$\text{number of chunks to be sent} = \frac{10MB}{1000 byte} = 10^3 chunks$$
+                $$\text{time to transmit file} = \frac{10^3 \times (1000 + 60) bytes}{4 Mbps}
+                \times 8 bits/byte = 1060 ms$$
+            \item[(b.)]
+                \textbf{\underline{$10^3$ bytes/ms}} \newline
+                $$goodput = \frac{10 ^ 3 * (1000 + 60) bytes}{1060 ms}$$
+        \end{itemize}
+    \item[(3.)]
+        \textbf{\underline{6.81 ms}} \newline
+        $$\text{latency} = 2.2ms$$
+        $$\text{time for 1000 byte packet to reach B} = \frac{1000 bytes}{4Mbps} + latency =
+        2ms + 2.2ms$$
+        $$\text{time to send ack} = \frac{80 bytes}{4 Mbps} = 0.160 ms$$
+        $$\text{total time for ack to arrive at A} = 0.160 ms + 2.2ms$$
+        $$\text{total time} = 2ms + 2.2ms + 0.160ms + 2.2ms + 0.250 ms = 6.81 ms$$
+
+    \item[(4.)]
+        \textbf{\underline{6560 ms}} \newline
+        $$\text{number of chunks} = \frac{10MB}{1000bytes} = 10^3
+        \text{chunks}$$
+        $$\text{time for 1000 byte packet to reach B} = 2.2ms + 2.0ms$$
+        $$\text{time for ACK to reach A} = 2.2 ms + 0.160 ms$$
+        $$\text{total time} = 10 ^ 3 \text{chunks} \times (2.2ms + 2.0ms + 2.2ms +
+    0.160ms) = 6560 ms$$
+\end{itemize}
+\newpage
+ 
+ 
+\section*{2.}
+\begin{itemize}
+    \item[(1.)]
+        \textbf{\underline{108 ms}} \newline
+        $$\text{alice to a} = \frac{1500 bytes \times 8 bits/byte}{1mbps} + 2ms = 14ms$$
+        $$\text{a to b} = \frac{1500 bytes \times 8 bits/byte}{500kbps} + 20ms = 44ms$$
+        $$\text{b to c} = \frac{1500 bytes \times 8 bits/byte}{1mbps} + 30ms = 42ms$$
+        $$\text{c to bob} = \frac{1500 bytes \times 8 bits/byte}{2mbps} + 20ms = 8ms$$
+        $$\text{total time} = 14 + 44 + 42 + 8 = 108ms$$
+    \item[(2.)]
+        \textbf{\underline{184 ms}} \newline
+        Alice
+        \begin{tabular}{| l | l | l | l |}
+            \hline
+            Arrive & Depart \\ \hline
+            -- & 0ms\\
+            -- & 12ms\\
+            -- & 24ms\\
+            \hline
+        \end{tabular}
+        \newline
+        A
+        \begin{tabular}{| l | l | l | l |}
+            \hline
+            Arrive & Depart \\ \hline
+            14ms & 14ms\\
+            26ms & 46ms\\
+            38ms & 58ms\\
+            \hline
+        \end{tabular}
+        \newline
+        B
+        \begin{tabular}{| l | l | l | l |}
+            \hline
+            Arrive & Depart \\ \hline
+            58ms & 58ms\\
+            90ms & 120ms\\
+            102ms & 132ms\\
+            \hline
+        \end{tabular}
+        \newline
+        C
+        \begin{tabular}{| l | l | l | l |}
+            \hline
+            Arrive & Depart \\ \hline
+            100ms & 102ms\\
+            162ms & 164ms\\
+            174ms & 176ms\\
+            \hline
+        \end{tabular}
+        \newline
+        Bob
+        \begin{tabular}{| l | l | l | l |}
+            \hline
+            Arrive & Depart \\ \hline
+            110ms & -- \\
+            172ms & -- \\
+            184ms & -- \\
+            \hline
+        \end{tabular}
+    \item[(3.)]
+        \begin{itemize}
+            \item[(a.)]
+                \textbf{\underline{15 packets}} \newline
+            \item[(b.)]
+                \textbf{\underline{12, 14, 16, 18, 20 are dropped}} \newline
+        \end{itemize}
+    \item[(4.)]
+        \textbf{\underline{3/4ths of the packets are lost}} \newline
+        Half of the packets are lost from C to B and another half of \textit{those}
+        packets are lost from B to A. There are no packets lost from A to Alice
+        because the bandwidth along that link is greater than B to A.
+    \item[(5.)]
+        \begin{itemize}
+            \item[(a.)]
+                \textbf{\underline{204ms}} \newline
+                The bottleneck is at router A. So assuming A's queue fills up and
+                the packet is the last in the queue, it will take $5 \times 24ms$ to
+                transmit the packet and another 20ms to propogate to router B.
+                $$\text{total time} = 14ms + 5 \times 24ms + 20ms + 42ms + 8ms = 204ms$$
+            \item[(b.)]
+                \textbf{\underline{252ms}} \newline
+                Using simliar reasoning from part (a.), routers C and B drop packets.
+                So if C's queue fills up, our packet from Bob will have to wait 
+                $5 \times 12ms$ before being transmitted. If B's queue fills up, 
+                from B to A, our packet will have to wait $5 \times 25ms$ before
+                being transmitted. No packets are lost from A to Alice because
+                the bandwidth is greater from A to Alice than from B to A.
+                $$\text{total time} = 8ms + 5 \times 12ms + 30ms + 5 \times 24ms +
+                20ms + 14ms = 252ms$$
+        \end{itemize}
+\end{itemize}
+
+\newpage
+ 
+\section*{3.}
+\begin{itemize}
+    \item[(1.)]
+        \textbf{\underline{$\frac{M}{P} \times \frac{D}{B} + 2ms + (\frac{D}{B} + 2ms)
+            \times (Z-1)$}} \newline
+        Time for packets to travel from first switch to second switch
+        $$\frac{M}{P} \times \frac{D}{B} + 2ms$$
+        Since packets are transmitted as soon as they arrive at a switch, this is the
+        additional delay to pass the first packet to the next router:
+        $$(\frac{D}{B} + 2ms)$$
+
+        There are $(Z-1)$ switches so the total delay for passing the first packet is:
+        $$(\frac{D}{B} + 2ms) \times (Z-1)$$
+
+        So the total time to send the file is:
+        $$\frac{M}{P} \times \frac{D}{B} + 2ms + (\frac{D}{B} + 2ms) \times (Z-1)$$
+    \item[(2.)]
+        \textbf{\underline{$\frac{M}{P} \times \frac{D}{B} + 2ms + (h + 2ms)
+            \times (Z-1)$}} \newline
+        The answer is similar to part (1.) except instead of waiting $D/B$ to
+        transmit, we only wait $h$.
+    \item[(3.)]
+        \textbf{\underline{$2 \times [(\frac{k}{B} + 2ms) \times Z] + \frac{M}{P} \times \frac{D}{B} + 2ms \times Z$}} \newline
+        
+        The time to send the setup packet from Alice to Bob and back is:
+        $$2 \times [(\frac{k}{B} + 2ms) \times Z]$$
+
+        The time to transmit the file is:
+        $$\frac{M}{P} \times \frac{D}{B} + 2ms \times Z$$
+    \item[(4.)]
+        \begin{itemize}
+            \item[(a.)]
+            \item[(b.)]
+                1. There are a lot of routers between here and the destination which
+                increases the latency. 2. Some ISPs will play ``hot potato'' where
+                they reroute a packet as soon as it get its. Where the packet is
+                routed may not necessarily be the best route.
+        \end{itemize}
+\end{itemize}
+
+\newpage
+ 
+ 
+\section*{4.}
+\begin{itemize}
+    \item[(1.)]
+    \item[(2.)]
+\end{itemize}
+
+\newpage
+ 
+\end{document}
