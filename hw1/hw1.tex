@@ -29,13 +29,14 @@
     \item[(2.)]
         \begin{itemize}
             \item[(a.)]
-                \textbf{\underline{1060 ms}} \newline
-                $$\text{number of chunks to be sent} = \frac{10MB}{1000 byte} = 10^3 chunks$$
-                $$\text{time to transmit file} = \frac{10^3 \times (1000 + 60) bytes}{4 Mbps}
-                \times 8 bits/byte = 1060 ms$$
+                \textbf{\underline{21202 ms}} \newline
+                $$\text{number of chunks to be sent} = \frac{10MB}{1000 byte} = 10^4 chunks$$
+                $$\text{time to transmit file} = \frac{10^4 \times (1000 + 60)
+                bytes}{4 Mbps} \times 1000 ms / sec
+                \times 8 bits/byte + 2ms = 21202 ms$$
             \item[(b.)]
-                \textbf{\underline{$10^3$ bytes/ms}} \newline
-                $$goodput = \frac{10 ^ 3 * (1000 + 60) bytes}{1060 ms}$$
+                \textbf{\underline{$500$ bytes/ms}} \newline
+                $$goodput = \frac{10 ^ 4 * (1000 + 60) bytes}{21200 ms} = 500 bytes/ms$$
         \end{itemize}
     \item[(3.)]
         \textbf{\underline{6.81 ms}} \newline
@@ -170,7 +171,7 @@
         So the total time to send the file is:
         $$\frac{M}{P} \times \frac{D}{B} + 2ms + (\frac{D}{B} + 2ms) \times (Z-1)$$
     \item[(2.)]
-        \textbf{\underline{$\frac{M}{P} \times \frac{D}{B} + 2ms + (h + 2ms)
+        \textbf{\underline{$\frac{M}{P} \times \frac{D}{B} + 2ms + (\frac{h}{B} + 2ms)
             \times (Z-1)$}} \newline
         The answer is similar to part (1.) except instead of waiting $D/B$ to
         transmit, we only wait $h$.
