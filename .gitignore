@@ -34,3 +34,7 @@
 
 ### OSX ###
 .DS_Store
+
+### Python ###
+*.py[cod]
+
