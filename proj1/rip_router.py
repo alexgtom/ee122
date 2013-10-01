@@ -1,6 +1,21 @@
 from sim.api import *
 from sim.basics import *
 
+class DistanceTable(object):
+    def __init__(self):
+        self.distance = {}
+
+    def set(self, dest, via, distance):
+        if self.distance.get(dest) == None:
+            self.distance[dest] = {}
+        self.distance[dest][via] = distance
+
+    def get(self, dest, via=None):
+        if via:
+            return self.distance[dest][via]
+        else:
+            return min(self.distance[dest].values())
+
 '''
 Create your RIP router in this file.
 '''
