@@ -1,0 +1,1 @@
+watch('.*\.py') { |md| system("make tests") }
