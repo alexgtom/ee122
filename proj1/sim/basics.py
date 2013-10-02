@@ -95,7 +95,7 @@ class DiscoveryPacket (Packet):
                                  self.src.name if self.src else None,
                                  self.dst.name if self.dst else None,
                                  self.latency,
-                                 self,is_link_up)
+                                 self.is_link_up)
 
 class RoutingUpdate (Packet): 
     """
