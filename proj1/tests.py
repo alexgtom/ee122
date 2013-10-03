@@ -1,8 +1,24 @@
 import unittest
 
-from rip_router import DistanceTable, RIPRouter
+from rip_router import DistanceTable, RIPRouter, PortTable
 from sim.basics import BasicHost, DiscoveryPacket, Ping, RoutingUpdate
 from hub import Hub
+
+class PortTableTestCase(unittest.TestCase):
+    def setUp(self):
+        self.pt = PortTable()
+
+    def testPreferLowerPort1(self):
+        self.pt.set("A", 0)
+        self.pt.set("A", 1)
+        self.assertEquals(self.pt.get_port("A"), 0)
+
+    def testPreferLowerPort2(self):
+        self.pt.set("A", 1)
+        self.pt.set("A", 0)
+        self.assertEquals(self.pt.get_port("A"), 0)
+
+
 
 class DistanceTableTestCase(unittest.TestCase):
     def setUp(self):

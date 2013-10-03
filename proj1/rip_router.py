@@ -60,7 +60,12 @@ class PortTable(object):
         raise KeyError
 
     def set(self, host, port):
-        self.t[host] = port
+        if host in self.t:
+            # prefer host with lower port
+            if port < self.t[host]:
+                self.t[host] = port
+        else:
+            self.t[host] = port
 
     def del_host(self, host):
         del self.t[host]
