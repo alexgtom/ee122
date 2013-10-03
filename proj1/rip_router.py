@@ -92,28 +92,32 @@ class RIPRouter (Entity):
             self.port_table.set(packet.src, port)
             self.dt.set(packet.src, packet.src, 1)
 
-            # if there is a new minimum distnace to a destination,
-            # add it to the routing update
+            # send routing update
             routing_update = RoutingUpdate()
             for dst in self.dt.keys():
                 routing_update.add_destination(dst, self.dt.get(dst))
             self.send(routing_update, port=self.port_table.values())
-
         else:
             # if link is down, set distance to dst to infinity
-            self.dt.set(packet.src, packet.dst, DistanceTable.INFINITY)
+            self.dt.set(packet.src, packet.src, DistanceTable.INFINITY)
             self.port_table.del_host(packet.src)
 
     def handle_routing_update(self, packet, port):
         routing_update = RoutingUpdate()
         for dst in packet.all_dests():
-            if dst != self:
-                packet_src = self.port_table.get_host(port)
-                new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
-                self.dt.set(dst, packet_src, new_dist)
+            if dst == self:
+                # dont add dst to distance table if its self
+                continue
 
-                if new_dist < self.dt.get(dst):
-                    routing_update.add_destination(dst, new_dist)
+            packet_src = self.port_table.get_host(port)
+            new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
+            
+            # add to routing update if the new_dist is better than the current one
+            if new_dist < self.dt.get(dst):
+                routing_update.add_destination(dst, new_dist)
+            
+            # set new distance
+            self.dt.set(dst, packet_src, new_dist)
 
-        if len(packet.all_dests()) > 0:
+        if len(routing_update.all_dests()) > 0:
             self.send(routing_update, port=self.port_table.values())
