@@ -83,8 +83,11 @@ class RIPRouter (Entity):
         else:
             # handle other packet
             dst = self.dt.get_via(packet.dst)
-            self.send(packet, self.port_table.get_port(dst))
-
+            if self.dt.get(packet.dst) != DistanceTable.INFINITY:
+                self.send(packet, self.port_table.get_port(dst))
+            else:
+                # drop packet since there no path
+                pass
 
     def handle_discovery_packet(self, packet, port):
         if packet.is_link_up:
