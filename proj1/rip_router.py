@@ -75,21 +75,24 @@ class RIPRouter (Entity):
         self.dt = DistanceTable()
         self.port_table = PortTable()
 
-    def handle_rx (self, packet, port):
+    def handle_rx (self, packet, port, send=None):
+        if send == None:
+            send = self.send
+
         if isinstance(packet, DiscoveryPacket):
-            self.handle_discovery_packet(packet, port)
+            self.handle_discovery_packet(packet, port, send)
         elif isinstance(packet, RoutingUpdate):
-            self.handle_routing_update(packet, port)
+            self.handle_routing_update(packet, port, send)
         else:
             # handle other packet
             dst = self.dt.get_via(packet.dst)
             if self.dt.get(packet.dst) != DistanceTable.INFINITY:
-                self.send(packet, self.port_table.get_port(dst))
+                send(packet, self.port_table.get_port(dst))
             else:
                 # drop packet since there no path
                 pass
 
-    def handle_discovery_packet(self, packet, port):
+    def handle_discovery_packet(self, packet, port, send):
         if packet.is_link_up:
             # if link is up, set distance to dst to infinity
             self.port_table.set(packet.src, port)
@@ -103,9 +106,9 @@ class RIPRouter (Entity):
         routing_update = RoutingUpdate()
         for dst in self.dt.keys():
             routing_update.add_destination(dst, self.dt.get(dst))
-        self.send(routing_update, port=self.port_table.values())
+        send(routing_update, port=self.port_table.values())
 
-    def handle_routing_update(self, packet, port):
+    def handle_routing_update(self, packet, port, send):
         routing_update = RoutingUpdate()
         for dst in packet.all_dests():
             if dst == self:
@@ -123,4 +126,4 @@ class RIPRouter (Entity):
             self.dt.set(dst, packet_src, new_dist)
 
         if len(routing_update.all_dests()) > 0:
-            self.send(routing_update, port=self.port_table.values())
+            send(routing_update, port=self.port_table.values())
