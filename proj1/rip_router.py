@@ -5,16 +5,16 @@ class DistanceTable(object):
     def __init__(self):
         self.distance = {}
 
-    def set(self, dest, via, distance):
-        if self.distance.get(dest) == None:
-            self.distance[dest] = {}
-        self.distance[dest][via] = distance
+    def set(self, dst, via, distance):
+        if self.distance.get(dst) == None:
+            self.distance[dst] = {}
+        self.distance[dst][via] = distance
 
-    def get(self, dest, via=None):
+    def get(self, dst, via=None):
         if via:
-            return self.distance[dest][via]
+            return self.distance[dst][via]
         else:
-            return min(self.distance[dest].values())
+            return min(self.distance[dst].values())
 
 '''
 Create your RIP router in this file.
