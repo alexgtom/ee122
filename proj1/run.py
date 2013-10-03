@@ -11,16 +11,16 @@ _ENABLE_GUI = "--gui" in sys.argv
 _DISABLE_CONSOLE_LOG = True
 
 
-from hub import Hub as switch
-#from rip_router import RIPRouter as switch
+#from hub import Hub as switch
+from rip_router import RIPRouter as switch
 
 import sim.core
 import scenarios
 
 time.sleep(1) # Wait a sec for log client to maybe connect
 
-import scenarios.linear as scenario
 #import scenarios.linear as scenario
+import scenarios.candy as scenario
 scenario.create(switch_type = switch)
 
 # Import some stuff to use from the interpreter
@@ -48,4 +48,3 @@ Good luck!"""
 start = sim.core.simulate
 import code
 code.interact(local=locals(), banner='')
-
