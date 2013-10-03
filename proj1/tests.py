@@ -107,10 +107,14 @@ class RIPRouterBasicTest(unittest.TestCase):
         # test setup
         self.assertEquals(1, self.s1.dt.get(self.h1))
         self.assertEquals(1, self.s1.dt.get(self.s2))
+        self.assertEquals(1, self.s1.dt.get(self.h1, via=self.h1))
+        self.assertEquals(1, self.s1.dt.get(self.s2, via=self.s2))
         self.assertEquals(2, len(self.s1.dt))
 
         self.assertEquals(1, self.s2.dt.get(self.h2))
         self.assertEquals(1, self.s2.dt.get(self.s1))
+        self.assertEquals(1, self.s2.dt.get(self.h2, via=self.h2))
+        self.assertEquals(1, self.s2.dt.get(self.s1, via=self.s1))
         self.assertEquals(2, len(self.s2.dt))
         
         self.h1.ping(self.h2)
@@ -127,3 +131,6 @@ class RIPRouterBasicTest(unittest.TestCase):
         self.assertEquals(1, self.s1.dt.get(self.s2))
         self.assertEquals(2, self.s1.dt.get(self.h2))
         self.assertEquals(3, len(self.s1.dt))
+
+if __name__ == '__main__':
+    unittest.main()
