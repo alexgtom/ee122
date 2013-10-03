@@ -91,16 +91,16 @@ class RIPRouter (Entity):
             # if link is up, set distance to dst to infinity
             self.port_table.set(packet.src, port)
             self.dt.set(packet.src, packet.src, 1)
-
-            # send routing update
-            routing_update = RoutingUpdate()
-            for dst in self.dt.keys():
-                routing_update.add_destination(dst, self.dt.get(dst))
-            self.send(routing_update, port=self.port_table.values())
         else:
             # if link is down, set distance to dst to infinity
             self.dt.set(packet.src, packet.src, DistanceTable.INFINITY)
             self.port_table.del_host(packet.src)
+
+        # send routing update
+        routing_update = RoutingUpdate()
+        for dst in self.dt.keys():
+            routing_update.add_destination(dst, self.dt.get(dst))
+        self.send(routing_update, port=self.port_table.values())
 
     def handle_routing_update(self, packet, port):
         routing_update = RoutingUpdate()
