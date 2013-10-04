@@ -7,9 +7,9 @@
 \def\Login{ee122-ki} % Your login
 \def\HomeworkNum{1}
 
-\title{CS170--Spring 2013 --- Solutions to Homework \HomeworkNum}
+\title{EE122--Spring 2013 --- Solutions to Homework \HomeworkNum}
 \author{\Name, \texttt{\Login}}
-\markboth{CS170--Spring 2013 Homework \HomeworkNum \Name}{CS170--Spring
+\markboth{EE122--Spring 2013 Homework \HomeworkNum \Name}{CS170--Spring
     2013 Homework 11 \Name, \texttt{\Login}}
 \pagestyle{myheadings}
 
@@ -35,26 +35,28 @@
                 bytes}{4 Mbps} \times 1000 ms / sec
                 \times 8 bits/byte + 2ms = 21202 ms$$
             \item[(b.)]
-                \textbf{\underline{$500$ bytes/ms}} \newline
-                $$goodput = \frac{10 ^ 4 * (1000 + 60) bytes}{21200 ms} = 500 bytes/ms$$
+                \textbf{\underline{$3.774$ bytes/ms}} \newline
+                $$goodput = \frac{10^4 chunks}{21200ms} \times \frac{1000 * 8
+                bits}{1000ms} = 3.774 Mbps$$
         \end{itemize}
     \item[(3.)]
-        \textbf{\underline{6.81 ms}} \newline
-        $$\text{latency} = 2.2ms$$
+        \textbf{\underline{6.41 ms}} \newline
+        %1000*8/(4*10^6)*1000+2.0+.250+2+80*8/(4*10^6)*1000
+        $$\text{latency} = 2.0ms$$
         $$\text{time for 1000 byte packet to reach B} = \frac{1000 bytes}{4Mbps} + latency =
         2ms + 2.2ms$$
-        $$\text{time to send ack} = \frac{80 bytes}{4 Mbps} = 0.160 ms$$
-        $$\text{total time for ack to arrive at A} = 0.160 ms + 2.2ms$$
-        $$\text{total time} = 2ms + 2.2ms + 0.160ms + 2.2ms + 0.250 ms = 6.81 ms$$
+        $$\text{time to send ack} = \frac{80 * 8 bits}{4 Mbps} = 0.160 ms$$
+        $$\text{total time for ack to arrive at A} = 0.160 ms + 2.0ms$$
+        $$\text{total time} = 2.0ms + 2.0ms + 0.160ms + 2.0ms + 0.250 ms = 6.41 ms$$
 
     \item[(4.)]
-        \textbf{\underline{6560 ms}} \newline
-        $$\text{number of chunks} = \frac{10MB}{1000bytes} = 10^3
+        \textbf{\underline{61.6ms}} \newline
+        $$\text{number of chunks} = \frac{10KB}{1000bytes} = 10
         \text{chunks}$$
-        $$\text{time for 1000 byte packet to reach B} = 2.2ms + 2.0ms$$
-        $$\text{time for ACK to reach A} = 2.2 ms + 0.160 ms$$
-        $$\text{total time} = 10 ^ 3 \text{chunks} \times (2.2ms + 2.0ms + 2.2ms +
-    0.160ms) = 6560 ms$$
+        $$\text{time for 1000 byte packet to reach B} = 2.0ms + 2.0ms$$
+        $$\text{time for ACK to reach A} = 2.0 ms + 0.160 ms$$
+        $$\text{total time} = 10 \text{chunks} \times (2.0ms + 2.0ms + 2.0ms +
+    0.160ms) = 61.6 ms$$
 \end{itemize}
 \newpage
  
@@ -69,54 +71,40 @@
         $$\text{c to bob} = \frac{1500 bytes \times 8 bits/byte}{2mbps} + 20ms = 8ms$$
         $$\text{total time} = 14 + 44 + 42 + 8 = 108ms$$
     \item[(2.)]
-        \textbf{\underline{184 ms}} \newline
-        Alice
+        \textbf{\underline{156 ms}} \newline
         \begin{tabular}{| l | l | l | l |}
             \hline
-            Arrive & Depart \\ \hline
-            -- & 0ms\\
-            -- & 12ms\\
-            -- & 24ms\\
+            Alice & A\\ \hline
+            0ms & 14ms\\
+            12ms & 26ms\\
+            24ms & 38ms\\
             \hline
         \end{tabular}
         \newline
-        A
         \begin{tabular}{| l | l | l | l |}
             \hline
-            Arrive & Depart \\ \hline
-            14ms & 14ms\\
-            26ms & 46ms\\
-            38ms & 58ms\\
+            A & B \\ \hline
+            14ms & 58ms\\
+            38ms & 82ms\\
+            62ms & 106ms\\
             \hline
         \end{tabular}
         \newline
-        B
         \begin{tabular}{| l | l | l | l |}
             \hline
-            Arrive & Depart \\ \hline
-            58ms & 58ms\\
-            90ms & 120ms\\
-            102ms & 132ms\\
+            B & C \\ \hline
+            58ms & 110ms\\
+            82ms & 123ms\\
+            106ms & 148ms\\
             \hline
         \end{tabular}
         \newline
-        C
         \begin{tabular}{| l | l | l | l |}
             \hline
-            Arrive & Depart \\ \hline
-            100ms & 102ms\\
-            162ms & 164ms\\
-            174ms & 176ms\\
-            \hline
-        \end{tabular}
-        \newline
-        Bob
-        \begin{tabular}{| l | l | l | l |}
-            \hline
-            Arrive & Depart \\ \hline
-            110ms & -- \\
-            172ms & -- \\
-            184ms & -- \\
+            C & Bob\\ \hline
+            110ms & 118ms\\
+            124ms & 132ms\\
+            148ms & 156ms\\
             \hline
         \end{tabular}
     \item[(3.)]
@@ -125,6 +113,10 @@
                 \textbf{\underline{15 packets}} \newline
             \item[(b.)]
                 \textbf{\underline{12, 14, 16, 18, 20 are dropped}} \newline
+
+            Packets start dropping at packet 12 because the queue fills up. When the
+            next packet comes in, the queue has one empty slot, but the packet after
+            that is dropped. This pattern continues. 
         \end{itemize}
     \item[(4.)]
         \textbf{\underline{3/4ths of the packets are lost}} \newline
@@ -134,21 +126,22 @@
     \item[(5.)]
         \begin{itemize}
             \item[(a.)]
-                \textbf{\underline{204ms}} \newline
+                \textbf{\underline{228ms}} \newline
                 The bottleneck is at router A. So assuming A's queue fills up and
                 the packet is the last in the queue, it will take $5 \times 24ms$ to
                 transmit the packet and another 20ms to propogate to router B.
-                $$\text{total time} = 14ms + 5 \times 24ms + 20ms + 42ms + 8ms = 204ms$$
+                $$\text{total time} = 14ms + 5 \times 24ms + 24ms + 20ms + 42ms + 8ms
+                = 228ms$$
             \item[(b.)]
-                \textbf{\underline{252ms}} \newline
+                \textbf{\underline{288ms}} \newline
                 Using simliar reasoning from part (a.), routers C and B drop packets.
                 So if C's queue fills up, our packet from Bob will have to wait 
                 $5 \times 12ms$ before being transmitted. If B's queue fills up, 
                 from B to A, our packet will have to wait $5 \times 25ms$ before
                 being transmitted. No packets are lost from A to Alice because
                 the bandwidth is greater from A to Alice than from B to A.
-                $$\text{total time} = 8ms + 5 \times 12ms + 30ms + 5 \times 24ms +
-                20ms + 14ms = 252ms$$
+                $$\text{total time} = 8 + 5 \times 12 + 12 + 30 + 5 \times
+                24 + 24 + 20 + 14 = 288ms$$
         \end{itemize}
 \end{itemize}
 
@@ -185,12 +178,18 @@
         $$\frac{M}{P} \times \frac{D}{B} + 2ms \times Z$$
     \item[(4.)]
         \begin{itemize}
-            \item[(a.)]
+            \item[(a.)] 
+                \textbf{\underline{Cut Through}} \newline
+                Plugging in the values into the derived equations above: \newline
+                Store and Forward: 18.23ms \newline
+                Cut Through: 16.55ms \newline
+                Circuit Switching: 48.20ms 
             \item[(b.)]
-                1. There are a lot of routers between here and the destination which
-                increases the latency. 2. Some ISPs will play ``hot potato'' where
-                they reroute a packet as soon as it get its. Where the packet is
-                routed may not necessarily be the best route.
+                \textbf{\underline{Circuit Switching}}
+                Plugging in the values into the derived equations above: \newline
+                Store and Forward: 4977.74ms \newline
+                Cut Through: 4976.06ms \newline
+                Circuit Switching: 4848.14ms
         \end{itemize}
 \end{itemize}
 
@@ -200,7 +199,15 @@
 \section*{4.}
 \begin{itemize}
     \item[(1.)]
+        \begin{figure}[ht!]
+            \centering
+            \includegraphics[width=90mm]{chart.jpg}
+        \end{figure}
     \item[(2.)]
+        1. There are a lot of routers between here and the destination which
+        increases the latency. The more routers there are, the higher the latency. 
+        2. The links between the routers may be fast or week. The propagation delay
+        can very.
 \end{itemize}
 
 \newpage
