@@ -112,16 +112,27 @@ class RIPRouter (Entity):
 
         # send routing update
         routing_update = RoutingUpdate()
+        exclude_ports = []
+
         for dst in self.dt.keys():
+            # prevent poison reverse
+            if self.dt.get(dst) == 2:
+                exclude_ports.append(self.port_table.get_port(self.dt.get_via(dst)))
+
             routing_update.add_destination(dst, self.dt.get(dst))
-        send(routing_update, port=self.port_table.values())
+        send(routing_update, exclude_ports, flood=True)
 
     def handle_routing_update(self, packet, port, send):
         routing_update = RoutingUpdate()
+        exclude_ports = []
         for dst in packet.all_dests():
             if dst == self:
                 # dont add dst to distance table if its self
                 continue
+
+            # prevent poison reverse
+            if self.dt.get(dst) == 2:
+                exclude_ports.append(self.port_table.get_port(self.dt.get_via(dst)))
 
             packet_src = self.port_table.get_host(port)
             new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
@@ -134,4 +145,4 @@ class RIPRouter (Entity):
             self.dt.set(dst, packet_src, new_dist)
 
         if len(routing_update.all_dests()) > 0:
-            send(routing_update, port=self.port_table.values())
+            send(routing_update, exclude_ports, flood=True)
