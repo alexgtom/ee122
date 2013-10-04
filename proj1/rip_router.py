@@ -72,6 +72,9 @@ class PortTable(object):
 
     def values(self):
         return self.t.values()
+
+    def __contains__(self, key):
+        return key in self.t
 '''
 Create your RIP router in this file.
 '''
