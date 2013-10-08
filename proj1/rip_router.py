@@ -46,6 +46,9 @@ class DistanceTable(object):
     def __len__(self):
         return len(self.distance)
 
+    def delete(self, dst):
+        del self.distance[dst]
+
 class PortTable(object):
     def __init__(self):
         self.t = {}
@@ -101,41 +104,35 @@ class RIPRouter (Entity):
                 pass
 
     def handle_discovery_packet(self, packet, port, send):
+        # prevent poison reverse
+        exclude_ports = []
+        exclude_ports.append(port)
+
         if packet.is_link_up:
             # if link is up, set distance to dst to infinity
             self.port_table.set(packet.src, port)
             self.dt.set(packet.src, packet.src, 1)
         else:
             # if link is down, set distance to dst to infinity
-            self.dt.set(packet.src, packet.src, DistanceTable.INFINITY)
-            self.port_table.del_host(packet.src)
-
-        # send routing update
-        routing_update = RoutingUpdate()
-        exclude_ports = []
-
-        for dst in self.dt.keys():
-            # prevent poison reverse
-            if self.dt.get(dst) == 2:
-                exclude_ports.append(self.port_table.get_port(self.dt.get_via(dst)))
-
-            routing_update.add_destination(dst, self.dt.get(dst))
-        send(routing_update, exclude_ports, flood=True)
+            for dst in self.dt.keys():
+                self.dt.set(dst, packet.src, DistanceTable.INFINITY)
 
     def handle_routing_update(self, packet, port, send):
         routing_update = RoutingUpdate()
+        # prevent poison reverse
         exclude_ports = []
+        exclude_ports.append(port)
+
         for dst in packet.all_dests():
             if dst == self:
                 # dont add dst to distance table if its self
                 continue
 
-            # prevent poison reverse
-            if self.dt.get(dst) == 2:
-                exclude_ports.append(self.port_table.get_port(self.dt.get_via(dst)))
-
+            # calculate new distance
             packet_src = self.port_table.get_host(port)
             new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
+            if packet.get_distance(dst) >= DistanceTable.INFINITY:
+                new_dist = DistanceTable.INFINITY
             
             # add to routing update if the new_dist is better than the current one
             if new_dist < self.dt.get(dst):
