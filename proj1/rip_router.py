@@ -172,23 +172,26 @@ class RIPRouter (Entity):
         print "handle_routing_update"
         routing_update = RoutingUpdate()
 
-        for dst in packet.all_dests():
-            if dst == self:
-                # dont add dst to distance table if its self
-                continue
+        neighbors = self.port_table.keys()
+        for n in neighbors:
+            for dst in packet.all_dests():
+                if dst == self:
+                    # dont add dst to distance table if its self
+                    continue
 
-            # calculate new distance
-            if packet.get_distance(dst) < DistanceTable.INFINITY:
-                packet_src = self.port_table.get_host(port)
-                new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
-            
-                # add to routing update if the new_dist is better than the current one
-                if new_dist < self.dt.get(dst):
-                    routing_update.add_destination(dst, new_dist)
+                # calculate new distance
+                if packet.get_distance(dst) < DistanceTable.INFINITY:
+                    packet_src = self.port_table.get_host(port)
+                    new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
+                
+                    # add to routing update if the new_dist is better than the current one
+                    # handles poison reverse too
+                    if new_dist < self.dt.get(dst) and n != dst:
+                        routing_update.add_destination(dst, new_dist)
 
-                # set new distance
-                self.dt.set(dst, packet_src, new_dist)
-            
-
-        if len(routing_update.all_dests()) > 0:
-            send(routing_update, port, flood=True)
+                    # set new distance
+                    self.dt.set(dst, packet_src, new_dist)
+            if len(routing_update.all_dests()) > 0:
+                neighbor_port = self.port_table.get_port(n) 
+                if neighbor_port != port:
+                    send(routing_update, neighbor_port)
