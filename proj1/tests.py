@@ -52,6 +52,10 @@ class DistanceTableTestCase(unittest.TestCase):
         self.assertTrue(self.dt.set("A", "C", 1))
         self.assertFalse(self.dt.set("A", "C", 4))
         self.assertFalse(self.dt.set("A", "C", 4))
+        self.assertTrue(self.dt.set("D", "C", 1))
+        self.assertTrue(self.dt.set("E", "C", 1))
+        self.assertTrue(self.dt.set("F", "C", 1))
+        self.assertTrue(self.dt.set("G", "G", 1))
 
 
 
