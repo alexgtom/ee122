@@ -110,13 +110,10 @@ class RIPRouter (Entity):
         self.dt = DistanceTable()
         self.port_table = PortTable()
         self.last_sent = {}
+        self.update_number = 0
+        self.last_update = []
 
     def handle_rx (self, packet, port, send=None):
-        print "*" * 40
-        print self
-        print packet
-        print port
-        print self.dt
         
         # list of nodes that should be included in next update
         self.update_list = []
@@ -138,38 +135,40 @@ class RIPRouter (Entity):
                 pass
 
     def handle_discovery_packet(self, packet, port, send):
-        print "handle_discovery_packet"
         if packet.is_link_up:
             self.port_table.set(packet.src, port)
-            new_dist = 1
         else:
             self.port_table.del_host(packet.src)
-            new_dist = DistanceTable.INFINITY
-
-        if packet.src not in self.dt:
-            if packet.is_link_up:
-                self.set(packet.src, packet.src, 1)
-            else:
-                self.set(packet.src, packet.src, DistanceTable.INFINITY)
-            self.send_update()
+    
+        if packet.is_link_up:
+            self.set(packet.src, packet.src, 1)
         else:
-            if self.dt.get(packet.src, packet.src) != new_dist:
-                for dst in self.dt.keys():
-                    if self.dt.has_via(dst, packet.src):
-                        self.set(dst, packet.src, new_dist + self.dt.get(dst))
-            self.send_update()
+            self.set(packet.src, packet.src, DistanceTable.INFINITY, force=False)
+        self.send_update()
 
 
     def handle_routing_update(self, packet, port, send):
-        print "handle_routing_update"
         for dst in packet.all_dests():
             self.set(dst, packet.src, self.dt.get(packet.src, packet.src) +
                      packet.get_distance(dst))
+        #if self.update_number > 0:
+        #    for node in self.last_update:
+        #        # if the node from the last update isnt in this update
+        #        # an implicit withdrawal happened
+        #        if node not in packet.all_dests():
+        #            for dst in self.dt.keys():
+        #                if self.dt.has_via(dst, node):
+        #                    self.set(dst, node, DistanceTable.INFINITY)
+
+
+        self.last_update = packet.all_dests()
+        self.update_number = 1
+
         self.send_update()
         
-    def set(self, dst, via, dist):
+    def set(self, dst, via, dist, force=False):
         changes = self.dt.set(dst, via, dist)
-        if changes:
+        if changes or force:
             self.update_list.append(dst)
 
         return changes
@@ -184,31 +183,22 @@ class RIPRouter (Entity):
             if isinstance(neighbor, HostEntity):
                 # exclude sending updates to HostEntites
                 continue
-            #if neighbor in self.last_sent:
-            #    for dst in self.dt.keys():
-            #        if dst not in self.last_sent[neighbor]:
-            #            self.update_list.append(dst)
-
             routing_update = RoutingUpdate()
             if len(self.update_list) > 0:
                 nodes = self.dt.keys()
-                #nodes = self.update_list
                 for dst in nodes:
                     if dst == neighbor:
                         continue
-                    #via = self.dt.get_via(neighbor)
-                    #if via in neighbor_list and via != neighbor:
-                    #    continue
-                    # add update if dst is not neighbor
+                    # poison reverse
+                    if dst in neighbor_list and len(neighbor_list) > 1:
+                        try:
+                            if self.dt.get(dst, neighbor) == self.dt.get(neighbor, dst):
+                                continue
+                        except KeyError:
+                            pass
+                        
                     routing_update.add_destination(dst, self.dt.get(dst))
-            # prevent poison reverse
-            #for neighbor in self.port_table.keys():
-            #    for dst in self.dt.keys():
-            #        if 
-        
             if len(routing_update.all_dests()) > 0:
-                print "Sending update from " + str(self)
-                print routing_update.str_routing_table()
                 self.send(routing_update, 
                           self.port_table.get_port(neighbor), 
                           flood=False)

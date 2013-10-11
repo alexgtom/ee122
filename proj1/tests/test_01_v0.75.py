@@ -41,6 +41,7 @@ class FakeEntity (Entity):
                         print "  "+str(dest)+","+str(cost)
                     return
                 print "Packet received: "+str(self.num_rx)
+                print packet.str_routing_table()
                 if not self.expectedUpdate[testCaseNum].has_key(self.num_rx):
                     print "FAILED: extra packet " + str(packet.str_routing_table()) + " sent by "+str(packet.src)+" to " + str(self) + " in test case "+str(testCaseNum)
                     print "Expected:" 

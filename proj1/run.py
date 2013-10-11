@@ -19,9 +19,9 @@ import scenarios
 
 time.sleep(1) # Wait a sec for log client to maybe connect
 
-#import scenarios.linear as scenario
-import scenarios.candy as scenario
-scenario.create(switch_type = switch)
+import scenarios.linear as scenario
+#import scenarios.candy as scenario
+scenario.create(switch_type = switch, n = 4)
 
 # Import some stuff to use from the interpreter
 import sim.basics as basics
@@ -47,15 +47,15 @@ Good luck!"""
 
 start = sim.core.simulate
 start()
-time.sleep(5)
-topo.disconnect(s3)
-time.sleep(3)
-topo.disconnect(s4)
-time.sleep(3)
-topo.link(s1, s2)
-time.sleep(3)
-#time.sleep(7)
-h1a.ping(h2b)
+#time.sleep(5)
+#topo.disconnect(s3)
+#time.sleep(3)
+#topo.disconnect(s4)
+#time.sleep(3)
+#topo.link(s1, s2)
+#time.sleep(3)
+##time.sleep(7)
+#h1a.ping(h2b)
 import code
 code.interact(local=locals(), banner='')
 time.sleep(60)
