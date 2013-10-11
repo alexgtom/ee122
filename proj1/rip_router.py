@@ -116,6 +116,7 @@ class RIPRouter (Entity):
         print self
         print packet
         print port
+        print self.dt
         
         # list of nodes that should be included in next update
         self.update_list = []
@@ -146,7 +147,10 @@ class RIPRouter (Entity):
             new_dist = DistanceTable.INFINITY
 
         if packet.src not in self.dt:
-            self.set(packet.src, packet.src, 1)
+            if packet.is_link_up:
+                self.set(packet.src, packet.src, 1)
+            else:
+                self.set(packet.src, packet.src, DistanceTable.INFINITY)
             self.send_update()
         else:
             if self.dt.get(packet.src, packet.src) != new_dist:
@@ -155,13 +159,14 @@ class RIPRouter (Entity):
                         self.set(dst, packet.src, new_dist + self.dt.get(dst))
             self.send_update()
 
+
     def handle_routing_update(self, packet, port, send):
         print "handle_routing_update"
         for dst in packet.all_dests():
             self.set(dst, packet.src, self.dt.get(packet.src, packet.src) +
                      packet.get_distance(dst))
         self.send_update()
-    
+        
     def set(self, dst, via, dist):
         changes = self.dt.set(dst, via, dist)
         if changes:
@@ -185,19 +190,22 @@ class RIPRouter (Entity):
             #            self.update_list.append(dst)
 
             routing_update = RoutingUpdate()
-            for dst in self.update_list:
-                if dst == neighbor:
-                    continue
-                via = self.dt.get_via(neighbor)
-                if via in neighbor_list and via != neighbor:
-                    continue
-                # add update if dst is not neighbor
-                routing_update.add_destination(dst, self.dt.get(dst))
+            if len(self.update_list) > 0:
+                nodes = self.dt.keys()
+                #nodes = self.update_list
+                for dst in nodes:
+                    if dst == neighbor:
+                        continue
+                    #via = self.dt.get_via(neighbor)
+                    #if via in neighbor_list and via != neighbor:
+                    #    continue
+                    # add update if dst is not neighbor
+                    routing_update.add_destination(dst, self.dt.get(dst))
             # prevent poison reverse
             #for neighbor in self.port_table.keys():
             #    for dst in self.dt.keys():
             #        if 
-            
+        
             if len(routing_update.all_dests()) > 0:
                 print "Sending update from " + str(self)
                 print routing_update.str_routing_table()

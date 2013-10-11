@@ -42,7 +42,9 @@ class FakeEntity (Entity):
                     return
                 print "Packet received: "+str(self.num_rx)
                 if not self.expectedUpdate[testCaseNum].has_key(self.num_rx):
-                    print "FAILED: extra packet sent by "+str(packet.src)+" to " + str(self) + " in test case "+str(testCaseNum)
+                    print "FAILED: extra packet " + str(packet.str_routing_table()) + " sent by "+str(packet.src)+" to " + str(self) + " in test case "+str(testCaseNum)
+                    print "Expected:" 
+                    print self.expectedUpdate[testCaseNum]
                     failed = True
                 elif (packet.src != self.expectedSender[testCaseNum][self.num_rx]):
                     print "FAILED: Sent by "+str(packet.src)+", should be "+str(self.expectedSender[testCaseNum][self.num_rx])
@@ -135,6 +137,8 @@ def create (switch_type = FakeEntity, host_type = FakeEntity, n = 2):
     time.sleep(waittime)
     topo.link(D, E)
     time.sleep(waittime)
+
+    print E.dt
     if(failed):
         return
     
