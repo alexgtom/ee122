@@ -111,7 +111,7 @@ class RIPRouter (Entity):
         self.port_table = PortTable()
 
     def handle_rx (self, packet, port, send=None):
-        print "** handle_rx"
+        print "*" * 40
         print self
         print packet
         print port
@@ -144,15 +144,22 @@ class RIPRouter (Entity):
             self.port_table.del_host(packet.src)
             new_dist = DistanceTable.INFINITY
 
-        if self.dt.get(packet.src, packet.src) != new_dist:
-            for dst in self.dt.keys():
-                self.set(dst, packet.src, new_dist + self.dt.get(dst))
+        if packet.src not in self.dt:
+            self.set(packet.src, packet.src, 1)
+            self.send_update()
+        else:
+            if self.dt.get(packet.src, packet.src) != new_dist:
+                for dst in self.dt.keys():
+                    if self.dt.has_via(dst, packet.src):
+                        self.set(dst, packet.src, new_dist + self.dt.get(dst))
+            self.send_update()
 
     def handle_routing_update(self, packet, port, send):
         print "handle_routing_update"
         for dst in packet.all_dests():
             self.set(dst, packet.src, self.dt.get(packet.src, packet.src) +
                      packet.get_distance(dst))
+        self.send_update()
     
     def set(self, dst, via, dist):
         changes = self.dt.set(dst, via, dist)
@@ -161,17 +168,35 @@ class RIPRouter (Entity):
 
         return changes
 
-    def send_update(self, packet, port=[], flood=False):
-        exclude_ports = port
+    def send_update(self, port=[], flood=True):
+        if type(port) != list:
+            port = [port]
 
-        routing_update = RoutingUpdate()
-        for dst in self.update_list:
-            routing_update.add_destination(dst, self.dt.get(dst))
+        neighbor_list = self.port_table.keys()
+        
+        for neighbor in neighbor_list:
+            if isinstance(neighbor, HostEntity):
+                # exclude sending updates to HostEntites
+                continue
 
-        # exclude sending updates to HostEntites
-        for dst in self.port_table.keys():
-            if type(dst) == HostEntity:
-                exclude_ports.append(self.port_table.get_port(dst))
-
-        self.send(packet, exclude_ports, flood=False)
+            routing_update = RoutingUpdate()
+            for dst in self.update_list:
+                if dst == neighbor:
+                    continue
+                via = self.dt.get_via(neighbor)
+                if via in neighbor_list and via != neighbor:
+                    continue
+                # add update if dst is not neighbor
+                routing_update.add_destination(dst, self.dt.get(dst))
+            # prevent poison reverse
+            #for neighbor in self.port_table.keys():
+            #    for dst in self.dt.keys():
+            #        if 
+            
+            if len(routing_update.all_dests()) > 0:
+                print "Sending update from " + str(self)
+                print routing_update.str_routing_table()
+                self.send(routing_update, 
+                          self.port_table.get_port(neighbor), 
+                          flood=False)
 
