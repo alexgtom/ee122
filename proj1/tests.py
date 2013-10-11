@@ -25,8 +25,9 @@ class DistanceTableTestCase(unittest.TestCase):
         self.dt = DistanceTable()
 
     def testGetAndSet(self):  ## test method names begin 'test*'
-        self.dt.set("A", "B", 2)
-        self.dt.set("A", "C", 1)
+        self.assertTrue(self.dt.set("A", "B", 2))
+        self.assertTrue(self.dt.set("A", "C", 1))
+        self.assertFalse(self.dt.set("A", "D", 4))
         self.assertEquals(1, self.dt.get("A"))
         self.assertEquals(1, self.dt.get("A", "C"))
         self.assertEquals(2, self.dt.get("A", "B"))
@@ -37,10 +38,21 @@ class DistanceTableTestCase(unittest.TestCase):
         # get_via
         self.assertEquals("C", self.dt.get_via("A"))
 
+        # has_via
+        self.assertTrue(self.dt.has_via("A", "B"))
+        self.assertTrue(self.dt.has_via("A", "C"))
+
     def testIn(self):
         self.assertFalse("A" in self.dt)
         self.dt.set("A", "B", 2)
         self.assertTrue("A" in self.dt)
+
+    def testSet(self):
+        self.assertTrue(self.dt.set("A", "B", 2))
+        self.assertTrue(self.dt.set("A", "C", 1))
+        self.assertFalse(self.dt.set("A", "C", 4))
+        self.assertFalse(self.dt.set("A", "C", 4))
+
 
 
 def createRIPRouterMock(send_assert=None, handle_rx_assert=None):

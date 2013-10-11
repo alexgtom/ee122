@@ -8,12 +8,21 @@ class DistanceTable(object):
         self.distance = {}
 
     def set(self, dst, via, distance):
+        """ returns true if there is a new minimum for dst """
         if self.distance.get(dst) == None:
             self.distance[dst] = {}
+            old_dist = self.INFINITY
+        else:
+            old_dist = self.get(dst)
+
         if distance >= self.INFINITY:
             self.distance[dst][via] = self.INFINITY
         else:
             self.distance[dst][via] = distance
+
+        new_dist = self.get(dst)
+
+        return new_dist < old_dist
 
     def get(self, dst, via=None):
         try:
@@ -106,6 +115,10 @@ class RIPRouter (Entity):
         print self
         print packet
         print port
+        
+        # list of nodes that should be included in next update
+        self.update_list = []
+
         if send == None:
             send = self.send
 
@@ -124,74 +137,41 @@ class RIPRouter (Entity):
 
     def handle_discovery_packet(self, packet, port, send):
         print "handle_discovery_packet"
-        print "packet.src not in self.dt == " + str(packet.src not in self.dt)
-
         if packet.is_link_up:
             self.port_table.set(packet.src, port)
+            new_dist = 1
         else:
             self.port_table.del_host(packet.src)
+            new_dist = DistanceTable.INFINITY
 
-        if packet.src not in self.dt:
-            if packet.is_link_up:
-                self.dt.set(packet.src, packet.src, 1)
-                self.send_discovery_update(port)
-            else:
-                # distance table dosent change
-                pass
-        else:
-            if packet.is_link_up:
-                self.dt.set(packet.src, packet.src, 1)
-                self.send_discovery_update(port)
-            else:
-                for dst in self.dt.keys():
-                    if self.dt.has_via(dst, packet.src):
-                        self.dt.set(dst, packet.src, DistanceTable.INFINITY)
-
-    def send_discovery_update(self, port=None):
-        if port:
-            exclude_ports = [port]
-        else:
-            exclude_ports = []
-
-        neighbors = self.port_table.keys()
-        
-        for n in neighbors:
-            routing_update = RoutingUpdate()
+        if self.dt.get(packet.src, packet.src) != new_dist:
             for dst in self.dt.keys():
-                if dst != n:
-                    if self.dt.get_via(n) == n:
-                        min_dist = DistanceTable.INFINITY
-                    else:
-                        min_dist = self.dt.get(dst)
-                    routing_update.add_destination(dst, min_dist)
-            port = self.port_table.get_port(n) 
-            if port not in exclude_ports and self.dt.get_num_via(n) > 1:
-                self.send(routing_update, port)
+                self.set(dst, packet.src, new_dist + self.dt.get(dst))
 
     def handle_routing_update(self, packet, port, send):
         print "handle_routing_update"
+        for dst in packet.all_dests():
+            self.set(dst, packet.src, self.dt.get(packet.src, packet.src) +
+                     packet.get_distance(dst))
+    
+    def set(self, dst, via, dist):
+        changes = self.dt.set(dst, via, dist)
+        if changes:
+            self.update_list.append(dst)
+
+        return changes
+
+    def send_update(self, packet, port=[], flood=False):
+        exclude_ports = port
+
         routing_update = RoutingUpdate()
+        for dst in self.update_list:
+            routing_update.add_destination(dst, self.dt.get(dst))
 
-        neighbors = self.port_table.keys()
-        for n in neighbors:
-            for dst in packet.all_dests():
-                if dst == self:
-                    # dont add dst to distance table if its self
-                    continue
+        # exclude sending updates to HostEntites
+        for dst in self.port_table.keys():
+            if type(dst) == HostEntity:
+                exclude_ports.append(self.port_table.get_port(dst))
 
-                # calculate new distance
-                if packet.get_distance(dst) < DistanceTable.INFINITY:
-                    packet_src = self.port_table.get_host(port)
-                    new_dist = self.dt.get(packet_src) + packet.get_distance(dst)
-                
-                    # add to routing update if the new_dist is better than the current one
-                    # handles poison reverse too
-                    if new_dist < self.dt.get(dst) and n != dst:
-                        routing_update.add_destination(dst, new_dist)
+        self.send(packet, exclude_ports, flood=False)
 
-                    # set new distance
-                    self.dt.set(dst, packet_src, new_dist)
-            if len(routing_update.all_dests()) > 0:
-                neighbor_port = self.port_table.get_port(n) 
-                if neighbor_port != port:
-                    send(routing_update, neighbor_port)
