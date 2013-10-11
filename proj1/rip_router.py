@@ -109,6 +109,7 @@ class RIPRouter (Entity):
     def __init__(self):
         self.dt = DistanceTable()
         self.port_table = PortTable()
+        self.last_sent = {}
 
     def handle_rx (self, packet, port, send=None):
         print "*" * 40
@@ -178,6 +179,10 @@ class RIPRouter (Entity):
             if isinstance(neighbor, HostEntity):
                 # exclude sending updates to HostEntites
                 continue
+            #if neighbor in self.last_sent:
+            #    for dst in self.dt.keys():
+            #        if dst not in self.last_sent[neighbor]:
+            #            self.update_list.append(dst)
 
             routing_update = RoutingUpdate()
             for dst in self.update_list:
@@ -199,4 +204,5 @@ class RIPRouter (Entity):
                 self.send(routing_update, 
                           self.port_table.get_port(neighbor), 
                           flood=False)
+                self.last_sent[neighbor] = routing_update.all_dests()
 
