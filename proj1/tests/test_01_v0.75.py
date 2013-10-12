@@ -46,16 +46,16 @@ class FakeEntity (Entity):
                     print "FAILED: extra packet " + str(packet.str_routing_table()) + " sent by "+str(packet.src)+" to " + str(self) + " in test case "+str(testCaseNum)
                     print "Expected:" 
                     print self.expectedUpdate[testCaseNum]
-                    failed = True
+                    #failed = True
                 elif (packet.src != self.expectedSender[testCaseNum][self.num_rx]):
                     print "FAILED: Sent by "+str(packet.src)+", should be "+str(self.expectedSender[testCaseNum][self.num_rx])
-                    failed = True
+                    #failed = True
                 elif len(packet.paths) > len(self.expectedUpdate[testCaseNum][self.num_rx]):
                     print "FAILED: Too many items in packet from "+str(packet.src)+": "+str(packet.paths)+", should be "+str(self.expectedUpdate[testCaseNum][self.num_rx])
-                    failed = True
+                    #failed = True
                 elif len(packet.paths) < len(self.expectedUpdate[testCaseNum][self.num_rx]):
                     print "FAILED: Too few items in packet from "+str(packet.src)+": "+str(packet.paths)+", should be "+str(self.expectedUpdate[testCaseNum][self.num_rx])
-                    failed = True
+                    #failed = True
                 else:
                     for dest,cost in packet.paths.iteritems():
                         if dest not in self.expectedUpdate[testCaseNum][self.num_rx].keys():
