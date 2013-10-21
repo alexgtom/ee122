@@ -1,0 +1,237 @@
+% Search for all the places that say "PUT SOMETHING HERE".
+
+\documentclass[11pt]{article}
+\usepackage{amsmath,textcomp,amssymb,geometry,graphicx}
+
+\def\Name{Alexander Tom (ID: 20964861)}  % Your name
+\def\Login{ee122-ki} % Your login
+\def\HomeworkNum{1}
+
+\title{EE122--Spring 2013 --- Solutions to Homework \HomeworkNum}
+\author{\Name, \texttt{\Login}}
+\markboth{EE122--Spring 2013 Homework \HomeworkNum \Name}{CS170--Spring
+    2013 Homework 11 \Name, \texttt{\Login}}
+\pagestyle{myheadings}
+
+\begin{document}
+\maketitle
+ 
+\section*{Q1.}
+We can match up the IP addresses to the router's prefix using the following
+information:
+\begin{verbatim}
+R2 128.96.39.0/25 10000000 01100000 00100111 00000000  
+R3 128.96.39.0/27 10000000 01100000 00101000 00000000  
+R4 128.96.40.0/25 10000000 01100000 00101000 00000000  
+R5 192.4.153.0/26 11000000 00000100 10011001 00000000  
+R6 (default)                                           
+
+IP Addresses:
+   128.96.40.12   10000000 01100000 00101000 00001100 
+   128.96.39.10   10000000 01100000 00100111 00001010 
+   128.96.39.48   10000000 01100000 00100111 00110000 
+   192.4.153.17   11000000 00000100 10011001 00010001 
+   192.4.153.90   11000000 00000100 10011001 01011010 
+\end{verbatim}
+
+\begin{itemize}
+    \item[(a.)]
+        \textbf{\underline{R4}}
+    \item[(b.)]
+        \textbf{\underline{R3}}
+    \item[(c.)]
+        \textbf{\underline{R2}}
+    \item[(d.)]
+        \textbf{\underline{R5}}
+    \item[(e.)]
+        \textbf{\underline{R6}}
+\end{itemize}
+\newpage
+ 
+ 
+\section*{Q2.}
+\begin{itemize}
+    \item[(a.)]
+        \begin{figure}[ht!]
+            \centering
+            \includegraphics[width=90mm]{q2graph.png}
+        \end{figure}
+        \textbf{\underline{Shortest path from A-B through routers: A-E-D-C-D-B}}
+        \newline
+        \textbf{\underline{Shortest path from A-B through ASes: 1-2-4-2-3}}
+    \item[(b.)]
+        \textbf{\underline{A-E-D-C-B}} \newline
+        RIP routers, assuming that it has converged, would pick this path because it 
+        is the shortest path from A to B. The routers would not route through the nodes
+        in AS5 because that adds to the path and we would have to go through E just
+        like in the shortest path.
+    \item[(c.)]
+        \textbf{\underline{1-2-4-2-3 or 1-5-2-4-2-3}} \newline
+        BGP routers forward packets based on their policy. Since we don't know what
+        policy each AS has, there are two possible paths from A to B. It might be
+        more expensive to route traffic between AS1 and AS2 which causes us to take
+        the second path or it might be more expensive to route traffic between AS1 and
+        AS5 which would cause us to take the first path.
+
+
+\end{itemize}
+\newpage
+ 
+ 
+\section*{Q3.}
+\begin{itemize}
+    \item[(a.)] 
+        \textbf{\underline{6 packets}} \newline
+        $$transmission delay = 1kb * 8 / 160 kbps = 50ms$$
+        Assuming that there is no transmission delay for the ACK packet, the rtt is
+        $50 + 125 + 125 = 300ms$. So the number of packets we can transmit is $300/50
+        = 6$
+    \item[(b.)]
+        \textbf{\underline{Leia}} \newline
+        $W_R = 1$ is inefficient because we have to wait and ACK a packet one by one.
+        $W_R >> W_S$ dosen't give any advantages over $W_R = W_S$ because the sender
+        only sends at most $W_R$ packets at a time and the sender can only ACK back
+        at most $W_R$ packets. In other words, the sender won't send anymore packets 
+        unless $W_R$ packets were ACKed back.
+    \item[(c.)]
+        \textbf{\underline{Leia}} \newline
+        $W_R = 1$ is inefficient because we have to wait and ACK a packet one by one.
+        $W_R >> W_S$ still dosen't give any advantages over $W_R = W_S$ because,
+        although we send less ACKS, the sender can still only send at most $W_R$ packets at
+        a time because of the senders window size.
+\end{itemize}
+\newpage
+ 
+ 
+\section*{Q4.}
+    \textbf{\underline{b, c, e}} \newline
+    For (a), Y cannot forward to Z because Y is a peer to Z. Peers only forward
+    packets to customers. For (d), Z is a peer to W and so Z will only forward to its
+    customers, which is z1.
+
+\newpage
+ 
+ 
+\section*{Q5.}
+\begin{itemize}
+    \item[(a.)]
+        \textbf{\underline{$t = 1$ to $t = 6$ and $t = 22$ to $t = 25$}} \newline
+        Slow start occurs betweens these times because sender increases the send
+        rate exponentially
+    \item[(b.)]
+        \textbf{\underline{$t = 6$ to $t = 14$ and $t = 15$ to $t = 19$}} \newline
+        Congestion avoidance occurs between these times because it additively
+        increases.
+    \item[(c.)]
+        \textbf{\underline{triple duplicate ACK}} \newline
+    \item[(d.)]
+        \textbf{\underline{20}} \newline
+        Assuming at $t = 0$ we came from congestion avoidance, $sshtresh = 40 / 2$
+    \item[(e.)]
+        \textbf{\underline{20}} \newline
+    \item[(f.)]
+        \textbf{\underline{12}} \newline
+    \item[(g.)]
+        \textbf{\underline{sshthresh = 4 and cwnd = 4}} \newline
+        Before the ack, $cwnd = 8$ after the ack, $cwnd = 8 / 2 = 4$ and $sshtresh =
+        cwnd / 2 = 4$
+\end{itemize}
+\newpage
+ 
+ 
+\section*{Q6.}
+\begin{itemize}
+    \item[(a.)]
+        Traceroute uses a packets ttl field and pings gateways to a destination until
+        it receives an ICMP TIME\_EXCEEDED. Based on the ttl, we can order the ttl
+        times to find how many hops away we are from the destination.
+    \item[(b.)]
+        See output below on next page.
+    \item[(c.)]
+        \begin{verbatim}
+AS# OrgName
+[AS25] University of California, Berkeley
+[AS2152] Cenic
+[AS6939] Hurricane Electric
+[AS46841] Hurricane Electric
+[AS6939] Hurricane Electric
+[AS21513] Beagle networks
+        \end{verbatim}
+    Hurricane Electric and Cenic are ISPs.
+    \item[(d.)]
+        University of California--Berkeley, Cenic, Hurricane Electric, Beagle networks
+    \item[(e.)]
+        Whats going in here is that the server isn't sending an ICMP timeout. So we
+        don't know what is at that server.
+\end{itemize}
+\newpage
+\begin{verbatim}
+traceroute to 216.81.59.173 (216.81.59.173), 64 hops max, 52 byte packets
+ 1  * * *
+ 2  xe-0-2-0-1965.inr-341-mulcev.berkeley.edu (136.152.148.1)  3.915 ms  4.217 ms  1.779 ms
+ 3  t5-5.inr-201-sut.berkeley.edu (128.32.0.84)  1.719 ms  3.184 ms  1.503 ms
+ 4  xe-4-1-0.inr-001-sut.berkeley.edu (128.32.0.64)  1.706 ms  2.039 ms  1.769 ms
+ 5  dc-sfo-agg-1--ucb-10ge.cenic.net (137.164.50.16)  2.210 ms  2.199 ms  2.544 ms
+ 6  oak-agg2--sfo-agg1-10g.cenic.net (137.164.22.25)  3.509 ms  3.767 ms  4.113 ms
+ 7  dc-paix-px1--oak-core1-ge.cenic.net (137.164.47.174)  5.883 ms  4.257 ms  6.503 ms
+ 8  hurricane--paix-px1-ge.cenic.net (198.32.251.70)  5.839 ms  4.638 ms  4.862 ms
+ 9  10gigabitethernet3-1.core1.sjc2.he.net (72.52.92.70)  4.931 ms  18.072 ms  5.070 ms
+10  10gigabitethernet14-7.core1.lax2.he.net (184.105.213.5)  12.700 ms  14.424 ms  24.863 ms
+11  10gigabitethernet2-3.core1.phx2.he.net (184.105.222.85)  30.351 ms  25.921 ms  23.734 ms
+12  10gigabitethernet5-3.core1.dal1.he.net (184.105.222.78)  55.023 ms  49.798 ms  52.187 ms
+13  10gigabitethernet5-4.core1.atl1.he.net (184.105.213.114)  65.132 ms  67.895 ms  63.675 ms
+14  216.66.0.26 (216.66.0.26)  64.840 ms  65.634 ms  66.400 ms
+15  * * *
+16  episode.iv (206.214.251.1)  109.734 ms  104.120 ms  104.890 ms
+17  a.new.hope (206.214.251.6)  109.914 ms  105.201 ms  105.832 ms
+18  it.is.a.period.of.civil.war (206.214.251.9)  104.029 ms  104.033 ms  105.119 ms
+19  rebel.spaceships (206.214.251.14)  104.305 ms  107.745 ms  104.741 ms
+20  striking.from.a.hidden.base (206.214.251.17)  104.524 ms  105.060 ms  104.726 ms
+21  have.won.their.first.victory (206.214.251.22)  104.715 ms  104.820 ms  109.556 ms
+22  against.the.evil.galactic.empire (206.214.251.25)  106.173 ms  110.754 ms  105.306 ms
+23  during.the.battle (206.214.251.30)  104.211 ms  106.732 ms  106.343 ms
+24  rebel.spies.managed (206.214.251.33)  105.632 ms  105.376 ms  107.610 ms
+25  to.steal.secret.plans (206.214.251.38)  108.485 ms  104.901 ms  105.463 ms
+26  to.the.empires.ultimate.weapon (206.214.251.41)  107.013 ms  110.851 ms  106.629 ms
+27  the.death.star (206.214.251.46)  112.632 ms  107.514 ms  117.430 ms
+28  an.armored.space.station (206.214.251.49)  114.204 ms  117.200 ms  124.417 ms
+29  with.enough.power.to (206.214.251.54)  111.415 ms  111.660 ms  121.322 ms
+30  destroy.an.entire.planet (206.214.251.57)  127.725 ms  110.220 ms  136.048 ms
+31  pursued.by.the.empires (206.214.251.62)  137.677 ms  111.692 ms  118.035 ms
+32  sinister.agents (206.214.251.65)  216.410 ms  358.046 ms  111.243 ms
+33  princess.leia.races.home (206.214.251.70)  113.181 ms  111.011 ms  141.262 ms
+34  aboard.her.starship (206.214.251.73)  120.387 ms  174.607 ms  178.062 ms
+35  custodian.of.the.stolen.plans (206.214.251.78)  474.600 ms  207.096 ms  109.430 ms
+36  that.can.save.her (206.214.251.81)  134.725 ms  112.658 ms  114.332 ms
+37  people.and.restore (206.214.251.86)  128.163 ms  108.737 ms  116.432 ms
+38  freedom.to.the.galaxy (206.214.251.89)  222.440 ms  108.675 ms  111.629 ms
+39  0-----i-------i-----0 (206.214.251.94)  105.897 ms  105.250 ms  107.040 ms
+40  0------------------0 (206.214.251.97)  111.564 ms  144.463 ms  122.610 ms
+41  0-----------------0 (206.214.251.102)  378.353 ms  110.096 ms  191.894 ms
+42  0----------------0 (206.214.251.105)  106.679 ms  107.895 ms  136.144 ms
+43  0---------------0 (206.214.251.110)  124.932 ms  108.438 ms  106.814 ms
+44  0--------------0 (206.214.251.113)  110.118 ms  118.585 ms  118.825 ms
+45  0-------------0 (206.214.251.118)  107.223 ms  107.961 ms  111.643 ms
+46  0------------0 (206.214.251.121)  115.472 ms  112.181 ms  114.825 ms
+47  0-----------0 (206.214.251.126)  109.415 ms  106.850 ms  107.602 ms
+48  0----------0 (206.214.251.129)  108.703 ms  106.657 ms  108.140 ms
+49  0---------0 (206.214.251.134)  107.985 ms  109.357 ms  109.801 ms
+50  0--------0 (206.214.251.137)  106.893 ms  111.594 ms  128.541 ms
+51  0-------0 (206.214.251.142)  106.626 ms  106.653 ms  107.099 ms
+52  0------0 (206.214.251.145)  107.945 ms  116.798 ms  112.961 ms
+53  0-----0 (206.214.251.150)  110.877 ms  106.334 ms  107.445 ms
+54  0----0 (206.214.251.153)  106.143 ms  108.049 ms  106.902 ms
+55  0---0 (206.214.251.158)  106.969 ms  107.215 ms  106.917 ms
+56  0--0 (206.214.251.161)  106.386 ms  109.973 ms  107.437 ms
+57  0-0 (206.214.251.166)  106.816 ms  107.241 ms  112.182 ms
+58  00 (206.214.251.169)  141.245 ms  128.777 ms  108.391 ms
+59  i (206.214.251.174)  107.549 ms  109.398 ms  110.350 ms
+60  by.ryan.werber (206.214.251.177)  117.435 ms  122.467 ms  119.518 ms
+61  blizzards.breed.ccie.creativity (206.214.251.182)  111.896 ms  144.451 ms  152.818 ms
+62  please.try.again.tracerote.to.obiwan.scrye.net (206.214.251.185)  134.414 ms  171.098 ms  125.167 ms
+63  read.more.at.beaglenetworks.net (206.214.251.190)  107.420 ms *  113.591 ms
+\end{verbatim}
+\newpage
+ 
+ 
+\end{document}
