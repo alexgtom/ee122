@@ -9,17 +9,24 @@ import BasicSender
 '''
 This is a skeleton sender class. Create a fantastic transport protocol here.
 '''
+class DupAck:
+    pass
+
+class NewAck:
+    pass
 
 class Window(object):
     def __init__(self, window_size=5):
         self.window_size = window_size
         self.packets_dict = {}
+        self.ack_count = {}
 
     def set(self, seqno, packet):
         if len(self.packets_dict) == self.window_size:
             raise Exception("Too many packets in window.")
         else:
             self.packets_dict[seqno] = packet
+            self.ack_count[seqno] = 0
 
     def get(self, seqno):
         return self.packets_dict[seqno]
@@ -28,6 +35,18 @@ class Window(object):
         packet = self.get(seqno)
         del self.packets_dict[seqno]
         return packet
+
+    def ack(self, seqno):
+        """ 
+        increment the number of acks we have received for a packet 
+        returns weather or not the ack is a DupAck or a NewAck 
+        """
+        self.ack_count[seqno] += 1
+        if self.ack_count[seqno] > 1:
+            return DupAck
+        else:
+            return NewAck
+
 
     def __contains__(self, seqno):
         return seqno in self.packets_dict
@@ -44,7 +63,9 @@ class Sender(BasicSender.BasicSender):
 
     # Main sending loop.
     def start(self):
-        while True:
+        self.send_start()
+        msg_type = None
+        while not msg_type == 'end':
             try:
                 message, address = self.receive()
                 msg_type, seqno, data, checksum = self._split_message(message)
@@ -74,13 +95,18 @@ class Sender(BasicSender.BasicSender):
         pass
 
     def handle_ack(self, ack):
-        pass
+        if self.window.ack(ack) is DupAck:
+            self.handle_dup_ack(ack)
+        elif self.window.ack(ack) is NewAck:
+            self.handle_new_ack(ack)
+        else:
+            raise Exception("Could not determine ACK type")
 
     def handle_new_ack(self, ack):
-        pass
+        self.window.remove(ack)
 
     def handle_dup_ack(self, ack):
-        pass
+        self.resend(ack)
 
     def log(self, msg):
         if self.debug:
@@ -118,7 +144,7 @@ class Sender(BasicSender.BasicSender):
         
         # create packet
         packet = self.make_packet(msg_type, seqno, data)
-        assert len(self.packet) <= self.PACKET_SIZE
+        assert len(packet) <= self.PACKET_SIZE
 
         # add to window
         self.window.set(seqno, packet)
