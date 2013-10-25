@@ -63,10 +63,11 @@ class Sender(BasicSender.BasicSender):
 
     # Main sending loop.
     def start(self):
-        self.send_start()
         msg_type = None
         while not msg_type == 'end':
             try:
+                self.send()
+
                 message, address = self.receive()
                 msg_type, seqno, data, checksum = self._split_message(message)
                 try:
@@ -104,6 +105,7 @@ class Sender(BasicSender.BasicSender):
 
     def handle_new_ack(self, ack):
         self.window.remove(ack)
+        self.send_data()
 
     def handle_dup_ack(self, ack):
         self.resend(ack)
@@ -126,21 +128,18 @@ class Sender(BasicSender.BasicSender):
         """ Resends a packet based on it's seqno """
         super(Sender, self).send(self.window.get(seqno), address)
 
-    def send_start(self, **kwargs):
-        return self.send("start", **kwargs)
+    def send(self):
+        data = self.get_file_chunk()
 
-    def send_data(self, **kwargs):
-        return self.send("data", **kwargs)
+        if self.current_seqno == 0:
+            msg_type = 'start'
+        elif data == None:
+            msg_type = 'end'
+        else:
+            msg_type = 'data'
 
-    def send_end(self, **kwargs):
-        return self.send("end", **kwargs)
-
-    def send(self, msg_type, seqno=None, data=None, address=None):
-        if data == None:
-            data = self.get_file_chunk()
-        if seqno == None:
-            seqno = self.current_seqno
-            self.current_seqno += 1
+        seqno = self.current_seqno
+        self.current_seqno += 1
         
         # create packet
         packet = self.make_packet(msg_type, seqno, data)
@@ -150,7 +149,7 @@ class Sender(BasicSender.BasicSender):
         self.window.set(seqno, packet)
 
         # send packet
-        super(Sender, self).send(packet, address)
+        super(Sender, self).send(packet)
 
         return (seqno, packet)
 
