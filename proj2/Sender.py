@@ -3,6 +3,8 @@ import getopt
 import time
 import socket
 
+from pprint import pprint
+
 import Checksum
 import BasicSender
 
@@ -71,13 +73,16 @@ class Sender(BasicSender.BasicSender):
     # Main sending loop.
     def start(self):
         msg_type = None
-        while not msg_type == 'end':
+        sent_msg_type = None
+        done = False
+        while not done:
             try:
-                if not self.window.is_full():
-                    self.send()
+                while not self.window.is_full() and sent_msg_type != 'end':
+                    sent_msg_type, seqno, packet = self.send()
 
                 message = self.receive()
                 msg_type, seqno, data, checksum = self.split_packet(message)
+
                 try:
                     seqno = int(seqno)
                 except:
@@ -97,6 +102,11 @@ class Sender(BasicSender.BasicSender):
                     print e
                 pass # ignore
 
+            #pprint(self.window.packets_dict)
+
+            if len(self.window) == 0:
+                done = True
+
     def handle_timeout(self):
         pass
 
@@ -109,8 +119,7 @@ class Sender(BasicSender.BasicSender):
             raise Exception("Could not determine ACK type")
 
     def handle_new_ack(self, ack):
-        self.window.remove(ack)
-        self.send_data()
+        self.window.remove(ack-1)
 
     def handle_dup_ack(self, ack):
         self.resend(ack)
@@ -140,6 +149,7 @@ class Sender(BasicSender.BasicSender):
             msg_type = 'start'
         elif data == None:
             msg_type = 'end'
+            data = ""
         else:
             msg_type = 'data'
 
@@ -156,7 +166,7 @@ class Sender(BasicSender.BasicSender):
         # send packet
         super(Sender, self).send(packet)
 
-        return (seqno, packet)
+        return (msg_type, seqno, packet)
 
 
 
