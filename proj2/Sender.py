@@ -41,15 +41,22 @@ class Window(object):
         increment the number of acks we have received for a packet 
         returns weather or not the ack is a DupAck or a NewAck 
         """
-        self.ack_count[seqno] += 1
+        if seqno not in self.packets_dict:
+            return NewAck
+
         if self.ack_count[seqno] > 1:
             return DupAck
         else:
             return NewAck
 
-
     def __contains__(self, seqno):
         return seqno in self.packets_dict
+
+    def __len__(self):
+        return len(self.packets_dict)
+
+    def is_full(self):
+        return len(self.packets_dict) >= self.window_size
 
 class Sender(BasicSender.BasicSender):
     # packet size - message type - seqno - checksum - number of seperators
@@ -66,10 +73,11 @@ class Sender(BasicSender.BasicSender):
         msg_type = None
         while not msg_type == 'end':
             try:
-                self.send()
+                if not self.window.is_full():
+                    self.send()
 
-                message, address = self.receive()
-                msg_type, seqno, data, checksum = self._split_message(message)
+                message = self.receive()
+                msg_type, seqno, data, checksum = self.split_packet(message)
                 try:
                     seqno = int(seqno)
                 except:
@@ -80,9 +88,6 @@ class Sender(BasicSender.BasicSender):
                     self.handle_ack(seqno)
                 elif self.debug:
                     print "checksum failed: %s" % message
-
-                if time.time() - self.last_cleanup > self.timeout:
-                    self._cleanup()
             except socket.timeout:
                 self.handle_timeout()
             except (KeyboardInterrupt, SystemExit):
