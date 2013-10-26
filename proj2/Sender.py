@@ -3,8 +3,6 @@ import getopt
 import time
 import socket
 
-from pprint import pprint
-
 import Checksum
 import BasicSender
 
@@ -107,10 +105,8 @@ class Sender(BasicSender.BasicSender):
             self.window.ack_count[ack] += 1
             if self.window.ack_count[ack] == 3:
                 self.handle_dup_ack(ack)
-        pprint(self.window.packets_dict)
 
     def handle_new_ack(self, ack):
-        print "handle_new_ack"
         for seqno in self.window.packets_dict.keys():
             if seqno < ack:
                 self.window.remove(seqno)
@@ -120,7 +116,6 @@ class Sender(BasicSender.BasicSender):
                 self.done = True
 
     def handle_dup_ack(self, ack):
-        print "handle_dup_ack"
         self.resend(ack)
 
     def log(self, msg):
