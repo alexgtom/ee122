@@ -18,21 +18,23 @@ def tests_to_run(forwarder):
     from tests import BasicTest, RandomDropTest, CorruptTest, DelayTest, \
     DropFirstPacketsTest, DropStartAckTest, NonAckTest, RandomCorruptTest, \
     RandomDelayTest, RandomDuplicateTest, RandomReorderTest, StartAndEndTest
+
+    filename = "bigfile"
     
-    BasicTest.BasicTest(forwarder, "README")
-    RandomDropTest.RandomDropTest(forwarder, "README")
-    CorruptTest.CorruptTest(forwarder, "README")
-    DelayTest.DelayTest(forwarder, "README")
-    DropFirstPacketsTest.DropFirstPacketsTest(forwarder, "README")
-    DropStartAckTest.DropStartAckTest(forwarder, "README")
-    NonAckTest.NonAckTest(forwarder, "README")
+    #BasicTest.BasicTest(forwarder, filename)
+    #RandomDropTest.RandomDropTest(forwarder, filename)
+    #CorruptTest.CorruptTest(forwarder, filename)
+    #DelayTest.DelayTest(forwarder, filename)
+    #DropFirstPacketsTest.DropFirstPacketsTest(forwarder, filename)
+    #DropStartAckTest.DropStartAckTest(forwarder, filename)
+    #NonAckTest.NonAckTest(forwarder, filename)
+    #RandomCorruptTest.RandomCorruptTest(forwarder, filename)
 
-    RandomCorruptTest.RandomCorruptTest(forwarder, "README")
-    RandomDelayTest.RandomDelayTest(forwarder, "README")
+    RandomDelayTest.RandomDelayTest(forwarder, filename)
 
-    RandomDuplicateTest.RandomDuplicateTest(forwarder, "README")
-    RandomReorderTest.RandomReorderTest(forwarder, "README")
-    StartAndEndTest.StartAndEndTest(forwarder, "README")
+    #RandomDuplicateTest.RandomDuplicateTest(forwarder, filename)
+    #RandomReorderTest.RandomReorderTest(forwarder, filename)
+    #StartAndEndTest.StartAndEndTest(forwarder, filename)
 
 """
 Testing is divided into two pieces: this forwarder and a set of test cases in

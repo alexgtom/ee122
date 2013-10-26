@@ -3,6 +3,7 @@ import getopt
 import time
 import socket
 
+from pprint import pprint
 
 import Checksum
 import BasicSender
@@ -56,13 +57,13 @@ class Sender(BasicSender.BasicSender):
         super(Sender, self).__init__(dest, port, filename, debug)
         self.window = Window()
         self.current_seqno = 0
+        self.done = False
 
     # Main sending loop.
     def start(self):
         msg_type = None
         sent_msg_type = None
-        done = False
-        while not done:
+        while not self.done:
             try:
                 while not self.window.is_full() and sent_msg_type != 'end':
                     sent_msg_type, seqno, packet = self.send()
@@ -92,7 +93,7 @@ class Sender(BasicSender.BasicSender):
 
 
             if len(self.window) == 0:
-                done = True
+                self.done = True
 
     def handle_timeout(self):
         for seqno in self.window.packets_dict:
@@ -101,20 +102,25 @@ class Sender(BasicSender.BasicSender):
     def handle_ack(self, ack):
         if ack not in self.window.ack_count:
             self.window.ack_count[ack] = 0
-
-        self.window.ack_count[ack] += 1
-
-        if self.window.ack_count[ack] > 1:
-            self.handle_dup_ack(ack)
-        else:
             self.handle_new_ack(ack)
+        else:
+            self.window.ack_count[ack] += 1
+            if self.window.ack_count[ack] == 3:
+                self.handle_dup_ack(ack)
+        pprint(self.window.packets_dict)
 
     def handle_new_ack(self, ack):
+        print "handle_new_ack"
         for seqno in self.window.packets_dict.keys():
             if seqno < ack:
                 self.window.remove(seqno)
+        if not self.window.is_full():
+            msg_type, seqno, packet = self.send()
+            if msg_type == 'end':
+                self.done = True
 
     def handle_dup_ack(self, ack):
+        print "handle_dup_ack"
         self.resend(ack)
 
     def log(self, msg):
