@@ -3,7 +3,6 @@ import getopt
 import time
 import socket
 
-from pprint import pprint
 
 import Checksum
 import BasicSender
@@ -36,20 +35,8 @@ class Window(object):
     def remove(self, seqno):
         packet = self.get(seqno)
         del self.packets_dict[seqno]
+        del self.ack_count[seqno]
         return packet
-
-    def ack(self, seqno):
-        """ 
-        increment the number of acks we have received for a packet 
-        returns weather or not the ack is a DupAck or a NewAck 
-        """
-        if seqno not in self.packets_dict:
-            return NewAck
-
-        if self.ack_count[seqno] > 1:
-            return DupAck
-        else:
-            return NewAck
 
     def __contains__(self, seqno):
         return seqno in self.packets_dict
@@ -80,8 +67,11 @@ class Sender(BasicSender.BasicSender):
                 while not self.window.is_full() and sent_msg_type != 'end':
                     sent_msg_type, seqno, packet = self.send()
 
-                message = self.receive()
-                msg_type, seqno, data, checksum = self.split_packet(message)
+                message = self.receive(0.5)
+                if message == None:
+                    self.handle_timeout()
+                else:
+                    msg_type, seqno, data, checksum = self.split_packet(message)
 
                 try:
                     seqno = int(seqno)
@@ -93,8 +83,6 @@ class Sender(BasicSender.BasicSender):
                     self.handle_ack(seqno)
                 elif self.debug:
                     print "checksum failed: %s" % message
-            except socket.timeout:
-                self.handle_timeout()
             except (KeyboardInterrupt, SystemExit):
                 exit()
             except ValueError, e:
@@ -102,24 +90,29 @@ class Sender(BasicSender.BasicSender):
                     print e
                 pass # ignore
 
-            #pprint(self.window.packets_dict)
 
             if len(self.window) == 0:
                 done = True
 
     def handle_timeout(self):
-        pass
+        for seqno in self.window.packets_dict:
+            self.resend(seqno)
 
     def handle_ack(self, ack):
-        if self.window.ack(ack) is DupAck:
+        if ack not in self.window.ack_count:
+            self.window.ack_count[ack] = 0
+
+        self.window.ack_count[ack] += 1
+
+        if self.window.ack_count[ack] > 1:
             self.handle_dup_ack(ack)
-        elif self.window.ack(ack) is NewAck:
-            self.handle_new_ack(ack)
         else:
-            raise Exception("Could not determine ACK type")
+            self.handle_new_ack(ack)
 
     def handle_new_ack(self, ack):
-        self.window.remove(ack-1)
+        for seqno in self.window.packets_dict.keys():
+            if seqno < ack:
+                self.window.remove(seqno)
 
     def handle_dup_ack(self, ack):
         self.resend(ack)
