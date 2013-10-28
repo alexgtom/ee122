@@ -67,6 +67,7 @@ class Sender(BasicSender.BasicSender):
                     sent_msg_type, seqno, packet = self.send()
 
                 message = self.receive(0.5)
+                print message
                 if message == None:
                     self.handle_timeout()
                 else:
@@ -159,6 +160,7 @@ class Sender(BasicSender.BasicSender):
 
         # send packet
         super(Sender, self).send(packet)
+        print seqno
 
         return (msg_type, seqno, packet)
 

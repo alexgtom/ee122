@@ -62,8 +62,8 @@ class Receiver():
         }
 
     def start(self):
-	print "===== Welcome to Bears-TP Receiver v1.0! ====="
-	print "* Listening on port %d..." % self.port
+        print "===== Welcome to Bears-TP Receiver v1.3! ====="
+        print "* Listening on port %d..." % self.port
         while True:
             try:
                 message, address = self.receive()
@@ -109,13 +109,9 @@ class Receiver():
     def _handle_start(self, seqno, data, address):
         if not address in self.connections:
             self.connections[address] = Connection(address[0],address[1],seqno,self.debug)
-        conn = self.connections[address]
-        ackno, res_data = conn.ack(seqno,data)
-        for l in res_data:
             if self.debug:
-                print data
-            conn.record(l)
-        self._send_ack(ackno, address)
+                print "Accepted new connection %s" % str(address)
+        self._handle_data(seqno, data, address)
 
     # ignore packets from uninitiated connections
     def _handle_data(self, seqno, data, address):
@@ -131,6 +127,7 @@ class Receiver():
     # handle end packets
     def _handle_end(self, seqno, data, address):
         self._handle_data(seqno, data, address)
+        # Do not actually terminate connection, since Sender does not send ACKs to FINACKs
 
     # I'll do the ack-ing here, buddy
     def _handle_ack(self, seqno, data, address):

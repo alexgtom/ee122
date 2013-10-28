@@ -19,22 +19,22 @@ def tests_to_run(forwarder):
     DropFirstPacketsTest, DropStartAckTest, NonAckTest, RandomCorruptTest, \
     RandomDelayTest, RandomDuplicateTest, RandomReorderTest, StartAndEndTest
 
-    filename = "bigfile"
+    filename = "README"
     
     BasicTest.BasicTest(forwarder, filename)
     RandomDropTest.RandomDropTest(forwarder, filename)
-    CorruptTest.CorruptTest(forwarder, filename)
-    DelayTest.DelayTest(forwarder, filename)
-    DropFirstPacketsTest.DropFirstPacketsTest(forwarder, filename)
-    DropStartAckTest.DropStartAckTest(forwarder, filename)
-    NonAckTest.NonAckTest(forwarder, filename)
-    RandomCorruptTest.RandomCorruptTest(forwarder, filename)
-    RandomDuplicateTest.RandomDuplicateTest(forwarder, filename)
-    RandomReorderTest.RandomReorderTest(forwarder, filename)
-    StartAndEndTest.StartAndEndTest(forwarder, filename)
+    #CorruptTest.CorruptTest(forwarder, filename)
+    #DelayTest.DelayTest(forwarder, filename)
+    #DropFirstPacketsTest.DropFirstPacketsTest(forwarder, filename)
+    #DropStartAckTest.DropStartAckTest(forwarder, filename)
+    #NonAckTest.NonAckTest(forwarder, filename)
+    #RandomCorruptTest.RandomCorruptTest(forwarder, filename)
+    #RandomDuplicateTest.RandomDuplicateTest(forwarder, filename)
+    #RandomReorderTest.RandomReorderTest(forwarder, filename)
+    #StartAndEndTest.StartAndEndTest(forwarder, filename)
 
     # this test takes a long time to run
-    RandomDelayTest.RandomDelayTest(forwarder, filename)
+    #RandomDelayTest.RandomDelayTest(forwarder, filename)
 
 """
 Testing is divided into two pieces: this forwarder and a set of test cases in
