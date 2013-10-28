@@ -31,7 +31,8 @@ class DistanceTable(object):
             return self.INFINITY
 
         if via:
-            return self.distance[dst][via]
+            try: return self.distance[dst][via]
+            except KeyError: return self.INFINITY
         else:
             return min(self.distance[dst].values())
 
@@ -127,6 +128,7 @@ class RIPRouter (Entity):
             self.handle_routing_update(packet, port, send)
         else:
             # handle other packet
+            if packet.dst not in self.dt: return
             dst = self.dt.get_via(packet.dst)
             if self.dt.get(packet.dst) != DistanceTable.INFINITY:
                 send(packet, self.port_table.get_port(dst))
@@ -160,9 +162,11 @@ class RIPRouter (Entity):
         #                if self.dt.has_via(dst, node):
         #                    self.set(dst, node, DistanceTable.INFINITY)
 
+        if packet.src in self.last_sent:
+            for dst in filter(lambda dst: dst in self.dt and dst not in packet.all_dests(), self.last_sent[packet.src]):
+                self.dt.delete(dst)
 
-        self.last_update = packet.all_dests()
-        self.update_number = 1
+                [self.dt.set(d, dst, DistanceTable.INFINITY) for d in self.dt.keys() if self.dt.has_via(d, dst)]
 
         self.send_update()
         
@@ -190,17 +194,13 @@ class RIPRouter (Entity):
                     if dst == neighbor:
                         continue
                     # poison reverse
-                    if dst in neighbor_list and len(neighbor_list) > 1:
-                        try:
-                            if self.dt.get(dst, neighbor) == self.dt.get(neighbor, dst):
-                                continue
-                        except KeyError:
-                            pass
                         
+                    if neighbor in self.last_sent and dst in self.last_sent[neighbor] and self.last_sent[neighbor][dst] == self.dt.get(dst): continue
+                    else: self.last_sent[neighbor] = {}
+                    self.last_sent[neighbor][dst] = self.dt.get(dst)
                     routing_update.add_destination(dst, self.dt.get(dst))
             if len(routing_update.all_dests()) > 0:
                 self.send(routing_update, 
                           self.port_table.get_port(neighbor), 
                           flood=False)
-                self.last_sent[neighbor] = routing_update.all_dests()
 
