@@ -2,9 +2,9 @@ import sys
 import getopt
 import time
 import socket
+import os
 
 import Checksum
-import BasicSender
 
 '''
 This is a skeleton sender class. Create a fantastic transport protocol here.
@@ -53,12 +53,14 @@ class Sender(BasicSender.BasicSender):
 
     def __init__(self, dest, port, filename, debug=False):
         super(Sender, self).__init__(dest, port, filename, debug)
+        self.filename = filename
         self.window = Window()
         self.current_seqno = 0
         self.done = False
 
     # Main sending loop.
     def start(self):
+        self.start_time = time.time()
         msg_type = None
         sent_msg_type = None
         while not self.done:
@@ -67,7 +69,6 @@ class Sender(BasicSender.BasicSender):
                     sent_msg_type, seqno, packet = self.send()
 
                 message = self.receive(0.5)
-                print message
                 if message == None:
                     self.handle_timeout()
                 else:
@@ -77,8 +78,9 @@ class Sender(BasicSender.BasicSender):
                     seqno = int(seqno)
                 except:
                     raise ValueError
-                if debug:
+                if self.debug:
                     print "%s %d %s %s" % (msg_type, seqno, data, checksum)
+                    
                 if Checksum.validate_checksum(message):
                     self.handle_ack(seqno)
                 elif self.debug:
@@ -93,6 +95,11 @@ class Sender(BasicSender.BasicSender):
 
             if len(self.window) == 0:
                 self.done = True
+
+        self.infile.close()
+        self.end_time = time.time()
+        if self.debug:
+            self.print_statistics()
 
     def handle_timeout(self):
         for seqno in self.window.packets_dict:
@@ -160,9 +167,19 @@ class Sender(BasicSender.BasicSender):
 
         # send packet
         super(Sender, self).send(packet)
-        print seqno
 
         return (msg_type, seqno, packet)
+
+    def print_statistics(self):
+        file_size = os.path.getsize(self.filename)
+        total_time = self.end_time - self.start_time
+        print ("Transmission Statistics:")
+        print ("-----------------------------------")
+        print ("File size: %d" % file_size)
+        print ("Number of packets sent: %d" % (self.current_seqno-1))
+        print ("Elapsed time: %f seconds" % total_time)
+        print ("Throughput: " +  str(file_size/total_time) + " bps")
+        print ("-----------------------------------")
 
 
 
