@@ -2,9 +2,10 @@ import socket
 import getopt
 import sys
 import time
+import os
 
 import Checksum
-
+import BasicSender
 class Connection():
     def __init__(self,host,port,start_seq,debug=False):
         self.debug = debug
@@ -43,7 +44,14 @@ class Connection():
         self.outfile.close()
 
 class Receiver():
-    def __init__(self,listenport=33122,debug=False,timeout=10):
+    PACKET_SIZE = 1472
+    CHUNK_SIZE = PACKET_SIZE - 5 - 10 - 10 - 3 
+
+    def __init__(self, dest, port, filename, listenport=33122,debug=False,timeout=10):
+        super(Sender, self).__init__(dest, port, filename, debug)
+        self.filename = filename
+        self.window = Window()
+        self.current_seqno = 0
         self.debug = debug
         self.timeout = timeout
         self.last_cleanup = time.time()
@@ -60,29 +68,44 @@ class Receiver():
             'end' : self._handle_end,
             'ack' : self._handle_ack
         }
+        self.done = False
 
+    # Main sending loop.
     def start(self):
         print "===== Welcome to Bears-TP Receiver v1.3! ====="
         print "* Listening on port %d..." % self.port
-        while True:
+        self.start_time = time.time()
+        msg_type = None
+        received_msg_type = None
+        sent_msg_type = None
+        while not self.done:
             try:
-                message, address = self.receive()
-                msg_type, seqno, data, checksum = self._split_message(message)
+                while not self.window.is_full() and sent_msg_type != 'end':
+                    sent_msg_type, seqno, packet = self.send_window()
+
+                message, address = self.receive(0.5)
+                if message == None:
+                    self.handle_timeout()
+                else:
+                    msg_type, seqno, data, checksum = self.split_packet(message)
+
                 try:
                     seqno = int(seqno)
                 except:
                     raise ValueError
-                if debug:
+                if self.debug:
                     print "%s %d %s %s" % (msg_type, seqno, data, checksum)
+
                 if Checksum.validate_checksum(message):
-                    self.MESSAGE_HANDLER.get(msg_type,self._handle_other)(seqno, data, address)
+                    if msg_type == 'start' or msg_type == 'data' or msg_type =='end':
+                        #Do receiver functions
+                        received_msg_type = msg_type
+                        self.MESSAGE_HANDLER.get(received_msg_type,self._handle_other)(seqno, data, address)
+                    elif msg_type == 'ack':
+                        self.handle_ack(seqno)
+
                 elif self.debug:
                     print "checksum failed: %s" % message
-
-                if time.time() - self.last_cleanup > self.timeout:
-                    self._cleanup()
-            except socket.timeout:
-                self._cleanup()
             except (KeyboardInterrupt, SystemExit):
                 exit()
             except ValueError, e:
@@ -90,13 +113,99 @@ class Receiver():
                     print e
                 pass # ignore
 
-    # waits until packet is received to return
-    def receive(self):
-        return self.s.recvfrom(4096)
+
+            if len(self.window) == 0 && received_msg_type == 'end':
+                self.done = True
+
+        self.infile.close()
+        self.end_time = time.time()
+        if self.debug:
+            self.print_statistics()
+
+    def handle_timeout(self):
+        for seqno in self.window.packets_dict:
+            self.resend(seqno)
+
+    def handle_ack(self, ack):
+        if ack not in self.window.ack_count:
+            self.window.ack_count[ack] = 0
+            self.handle_new_ack(ack)
+        else:
+            self.window.ack_count[ack] += 1
+            if self.window.ack_count[ack] == 3:
+                self.handle_dup_ack(ack)
+
+    def handle_new_ack(self, ack):
+        for seqno in self.window.packets_dict.keys():
+            if seqno < ack:
+                self.window.remove(seqno)
+        if not self.window.is_full():
+            msg_type, seqno, packet = self.send_window()
+            if msg_type == 'end':
+                self.done = True
+
+    def handle_dup_ack(self, ack):
+        self.resend(ack)
+
+    def log(self, msg):
+        if self.debug:
+            print msg
+
+    def get_file_chunk(self):
+        """ 
+        returns a chunk in the file of size CHUNK_SIZE, returns None
+        if there are no more chunks left 
+        """
+        chunk = self.infile.read(self.CHUNK_SIZE)
+        if len(chunk) == 0:
+            return None
+        return chunk
+
+    def resend(self, seqno, address=None):
+        """ Resends a packet based on it's seqno """
+        super(Sender, self).send(self.window.get(seqno), address)
+
+    def send_window(self):
+        data = self.get_file_chunk()
+
+        if self.current_seqno == 0:
+            msg_type = 'start'
+        elif data == None:
+            msg_type = 'end'
+            data = ""
+        else:
+            msg_type = 'data'
+
+        seqno = self.current_seqno
+        self.current_seqno += 1
+        
+        # create packet
+        packet = self.make_packet(msg_type, seqno, data)
+        assert len(packet) <= self.PACKET_SIZE
+
+        # add to window
+        self.window.set(seqno, packet)
+
+        # send packet
+        super(Sender, self).send(packet)
+
+        return (msg_type, seqno, packet)
+
+    def print_statistics(self):
+        file_size = os.path.getsize(self.filename)
+        total_time = self.end_time - self.start_time
+        print ("Transmission Statistics:")
+        print ("-----------------------------------")
+        print ("File size: %d" % file_size)
+        print ("Number of packets sent: %d" % (self.current_seqno-1))
+        print ("Elapsed time: %f seconds" % total_time)
+        print ("Throughput: " +  str(file_size/total_time) + " bps")
+        print ("-----------------------------------")
+
 
     # sends a message to the specified address. Addresses are in the format:
     #   (IP address, port number)
-    def send(self, message, address):
+    def send_ack_packet(self, message, address):
         self.s.sendto(message, address)
 
     # this sends an ack message to address with specified seqno
@@ -104,7 +213,7 @@ class Receiver():
         m = "ack|%d|" % seqno
         checksum = Checksum.generate_checksum(m)
         message = "%s%s" % (m, checksum)
-        self.send(message, address)
+        self.send_ack_packet(message, address)
 
     def _handle_start(self, seqno, data, address):
         if not address in self.connections:
