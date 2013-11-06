@@ -58,6 +58,7 @@ class Sender(BasicSender.BasicSender):
         self.window = Window()
         self.current_seqno = 0
         self.done = False
+        self.packet_count = (os.path.getsize(self.filename)/self.CHUNK_SIZE) + 1
 
     # Main sending loop.
     def start(self):
@@ -74,6 +75,9 @@ class Sender(BasicSender.BasicSender):
                     self.handle_timeout()
                 else:
                     msg_type, seqno, data, checksum = self.split_packet(message)
+
+                if (seqno > self.packet_count):
+                    break;
 
                 try:
                     seqno = int(seqno)
@@ -117,7 +121,7 @@ class Sender(BasicSender.BasicSender):
 
     def handle_new_ack(self, ack):
         for seqno in self.window.packets_dict.keys():
-            if seqno < ack:
+            if seqno == ack:
                 self.window.remove(seqno)
         if not self.window.is_full():
             msg_type, seqno, packet = self.send()

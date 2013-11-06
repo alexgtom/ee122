@@ -17,8 +17,9 @@ class NewAck:
     pass
 
 class Window(object):
-    def __init__(self, window_size=5):
+    def __init__(self, window_size=1):
         self.window_size = window_size
+        self.SSTRESH = 16
         self.packets_dict = {}
         self.ack_count = {}
 
@@ -103,16 +104,24 @@ class Sender(BasicSender.BasicSender):
             self.print_statistics()
 
     def handle_timeout(self):
+        self.window.SSTRESH = self.window.window_size/2
+        self.window.window_size = 1
         for seqno in self.window.packets_dict:
             self.resend(seqno)
 
     def handle_ack(self, ack):
         if ack not in self.window.ack_count:
+            if (self.window.window_size < self.window.SSTRESH):
+                self.window.window_size += 1
+            else:
+                self.window.window_size += 1/self.window.window_size
             self.window.ack_count[ack] = 0
             self.handle_new_ack(ack)
         else:
             self.window.ack_count[ack] += 1
             if self.window.ack_count[ack] == 3:
+                self.window.window_size = self.window.window_size/2
+                self.SSTRESH = self.window.window_size
                 self.handle_dup_ack(ack)
 
     def handle_new_ack(self, ack):

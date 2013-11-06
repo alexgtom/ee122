@@ -1,49 +1,55 @@
-import socket
-import getopt
 import sys
+import getopt
 import time
+import socket
 import os
 
 import Checksum
 import BasicSender
-class Connection():
-    def __init__(self,host,port,start_seq,debug=False):
-        self.debug = debug
-        self.updated = time.time()
-        self.current_seqno = start_seq - 1 # expect to ack from the start_seqno
-        self.host = host
-        self.port = port
-        self.max_buf_size = 5
-        self.outfile = open("%s.%d" % (host,port),"w")
-        self.seqnums = {} # enforce single instance of each seqno
+import Receiver
 
-    def ack(self,seqno, data):
-        res_data = []
-        self.updated = time.time()
-        if seqno > self.current_seqno and seqno <= self.current_seqno + self.max_buf_size:
-            self.seqnums[seqno] = data
-            for n in sorted(self.seqnums.keys()):
-                if n == self.current_seqno + 1:
-                    self.current_seqno += 1
-                    res_data.append(self.seqnums[n])
-                    del self.seqnums[n]
-                else:
-                    break # when we find out of order seqno, quit and move on
+'''
+This is a skeleton sender class. Create a fantastic transport protocol here.
+'''
+class DupAck:
+    pass
 
-        if self.debug:
-            print "next seqno should be %d" % (self.current_seqno+1)
+class NewAck:
+    pass
 
-        # note: we return the /next/ sequence number we're expecting
-        return self.current_seqno+1, res_data
+class Window(object):
+    def __init__(self, window_size=5):
+        self.window_size = window_size
+        self.packets_dict = {}
+        self.ack_count = {}
 
-    def record(self,data):
-        self.outfile.write(data)
-        self.outfile.flush()
+    def set(self, seqno, packet):
+        if len(self.packets_dict) == self.window_size:
+            raise Exception("Too many packets in window.")
+        else:
+            self.packets_dict[seqno] = packet
+            self.ack_count[seqno] = 0
 
-    def end(self):
-        self.outfile.close()
+    def get(self, seqno):
+        return self.packets_dict[seqno]
 
-class Receiver():
+    def remove(self, seqno):
+        packet = self.get(seqno)
+        del self.packets_dict[seqno]
+        del self.ack_count[seqno]
+        return packet
+
+    def __contains__(self, seqno):
+        return seqno in self.packets_dict
+
+    def __len__(self):
+        return len(self.packets_dict)
+
+    def is_full(self):
+        return len(self.packets_dict) >= self.window_size
+
+class Sender(BasicSender.BasicSender):
+    # packet size - message type - seqno - checksum - number of seperators
     PACKET_SIZE = 1472
     CHUNK_SIZE = PACKET_SIZE - 5 - 10 - 10 - 3 
 
@@ -114,7 +120,7 @@ class Receiver():
                 pass # ignore
 
 
-            if len(self.window) == 0 && received_msg_type == 'end':
+            if len(self.window) == 0 and received_msg_type == 'end':
                 self.done = True
 
         self.infile.close()
@@ -266,34 +272,86 @@ class Receiver():
                 del self.connections[address]
         self.last_cleanup = now
 
+
+
+class Connection():
+    def __init__(self,host,port,start_seq,debug=False):
+        self.debug = debug
+        self.updated = time.time()
+        self.current_seqno = start_seq - 1 # expect to ack from the start_seqno
+        self.host = host
+        self.port = port
+        self.max_buf_size = 5
+        self.outfile = open("%s.%d" % (host,port),"w")
+        self.seqnums = {} # enforce single instance of each seqno
+
+    def ack(self,seqno, data):
+        res_data = []
+        self.updated = time.time()
+        if seqno > self.current_seqno and seqno <= self.current_seqno + self.max_buf_size:
+            self.seqnums[seqno] = data
+            for n in sorted(self.seqnums.keys()):
+                if n == self.current_seqno + 1:
+                    self.current_seqno += 1
+                    res_data.append(self.seqnums[n])
+                    del self.seqnums[n]
+                else:
+                    break # when we find out of order seqno, quit and move on
+
+        if self.debug:
+            print "next seqno should be %d" % (self.current_seqno+1)
+
+        # note: we return the /next/ sequence number we're expecting
+        return self.current_seqno+1, res_data
+
+    def record(self,data):
+        self.outfile.write(data)
+        self.outfile.flush()
+
+    def end(self):
+        self.outfile.close()
+
+
+
+
+'''
+This will be run if you run this script from the command line. You should not
+change any of this; the grader may rely on the behavior here to test your
+submission.
+'''
 if __name__ == "__main__":
     def usage():
-        print "BEARS-TP Receiver"
-        print "-p PORT | --port=PORT The listen port, defaults to 33122"
-        print "-t TIMEOUT | --timeout=TIMEOUT Receiver timeout in seconds"
+        print "BEARS-TP Sender"
+        print "-f FILE | --file=FILE The file to transfer; if empty reads from STDIN"
+        print "-p PORT | --port=PORT The destination port, defaults to 33122"
+        print "-a ADDRESS | --address=ADDRESS The receiver address or hostname, defaults to localhost"
         print "-d | --debug Print debug messages"
         print "-h | --help Print this usage message"
 
     try:
         opts, args = getopt.getopt(sys.argv[1:],
-                               "p:dt:", ["port=", "debug=", "timeout="])
+                               "f:p:a:d", ["file=", "port=", "address=", "debug="])
     except:
         usage()
         exit()
 
     port = 33122
+    dest = "localhost"
+    filename = None
     debug = False
-    timeout = 10
 
     for o,a in opts:
-        if o in ("-p", "--port="):
+        if o in ("-f", "--file="):
+            filename = a
+        elif o in ("-p", "--port="):
             port = int(a)
-        elif o in ("-t", "--timeout="):
-            timeout = int(a)
+        elif o in ("-a", "--address="):
+            dest = a
         elif o in ("-d", "--debug="):
             debug = True
-        else:
-            print usage()
-            exit()
-    r = Receiver(port, debug, timeout)
-    r.start()
+
+    s = Sender(dest,port,filename,debug)
+    try:
+        s.start()
+    except (KeyboardInterrupt, SystemExit):
+        exit()

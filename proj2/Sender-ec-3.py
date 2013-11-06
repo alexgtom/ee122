@@ -58,10 +58,14 @@ class Sender(BasicSender.BasicSender):
         self.window = Window()
         self.current_seqno = 0
         self.done = False
+        self.estimated_RTT = 0.2
+        self.RTO = 0.2
 
     # Main sending loop.
     def start(self):
         self.start_time = time.time()
+        self.curr_time = time.time()
+        self.receive_time = 0
         msg_type = None
         sent_msg_type = None
         while not self.done:
@@ -69,7 +73,10 @@ class Sender(BasicSender.BasicSender):
                 while not self.window.is_full() and sent_msg_type != 'end':
                     sent_msg_type, seqno, packet = self.send()
 
-                message = self.receive(0.5)
+                message = self.receive(self.RTO)
+                self.receive_time = time.time()
+                RTT = self.receive_time - self.curr_time
+                self.calculate_timeout(RTT)
                 if message == None:
                     self.handle_timeout()
                 else:
@@ -170,6 +177,11 @@ class Sender(BasicSender.BasicSender):
         super(Sender, self).send(packet)
 
         return (msg_type, seqno, packet)
+
+    def calculate_timeout(self, RTT):
+        self.estimated_RTT = (0.2 * self.estimated_RTT) + (0.8 * RTT) 
+        deviation = abs(RTT - self.estimated_RTT)
+        self.RTO = self.estimated_RTT + (4 * deviation)
 
     def print_statistics(self):
         file_size = os.path.getsize(self.filename)

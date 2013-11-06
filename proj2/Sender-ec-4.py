@@ -120,7 +120,7 @@ class Sender(BasicSender.BasicSender):
                 pass # ignore
 
 
-            if len(self.window) == 0 && received_msg_type == 'end':
+            if len(self.window) == 0 and received_msg_type == 'end':
                 self.done = True
 
         self.infile.close()

@@ -25,10 +25,8 @@ class Connection():
             for n in sorted(self.seqnums.keys()):
                 if n == self.current_seqno + 1:
                     self.current_seqno += 1
-                    res_data.append(self.seqnums[n])
-                    del self.seqnums[n]
-                else:
-                    break # when we find out of order seqno, quit and move on
+                res_data.append(self.seqnums[n])
+                del self.seqnums[n]
 
         if self.debug:
             print "next seqno should be %d" % (self.current_seqno+1)
