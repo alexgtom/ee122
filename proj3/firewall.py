@@ -8,23 +8,6 @@ import struct
 # (http://docs.python.org/2/library/)
 # You must NOT use any 3rd-party libraries, though.
 
-def ip2long(ip):
-    """
-    Convert an IP string to long
-    """
-    # remove slash ip suffex 
-    ip = ip.split('/')[0]
-
-    packedIP = socket.inet_aton(ip)
-    return struct.unpack("!L", packedIP)[0]
-
-def port_range(s):
-    ports = s.split('-')
-    if len(ports) == 2:
-        return xrange(int(ports[0]), int(ports[1]))
-    else:
-        return [int(ports[0])]
-
 class Firewall:
     TCP = 6
     UDP = 17
@@ -66,22 +49,37 @@ class Firewall:
     # @pkt: the actual data of the IPv4 packet (including IP header)
     def handle_packet(self, pkt_dir, pkt):
         # TODO: Your main firewall code will be here.
-        if self.handle_rules(pkt_dir pkt):
+        if self.handle_rules(pkt_dir, pkt):
             if pkt_dir == PKT_DIR_OUTGOING:
                 self.self.iface_ext.send_ip_packet(pkt)
             else:
                 self.self.iface_int.send_ip_packet(pkt)
 
+
+    """
+    =======================================================================================
+    The following functions deal with processing rules and comparing information from the
+    packet that was recieved against the rules.
+    =======================================================================================
+
+    """
+
     def handle_rules(self, pkt_dir, pkt):
+        pass_pkt = False
+
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
 
+        #If packet is not well formed, drop it
+        if pkt_info['valid'] != True:
+            return False
+
         #Pass all packets that aren't using ICMP, TCP, or UDP
-        if pkt_info['protocol'] = "other":
+        if pkt_info['protocol'] == "other":
             return True
 
         #Pass all DNS packets that fall outside the scope of the project
-        if pkt_info['protocol'] = "dns":
+        if pkt_info['protocol'] == "dns":
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
                 return True
             if pkt_info['dns_qclass'] != 1:
@@ -90,7 +88,180 @@ class Firewall:
         #Handle all of the rules
         for rule in self.rules:
             # TODO: Do shit here to make all of the rules work :((((
+            rule_tuple = tuple([t.lower() for t in rule.split()])
 
+            #Handle Transport Layer Rules
+            if len(rule_tuple) == 4:
+                # Protocol/IP/Port rules
+                verdict, protocol, ext_ip_address, ext_port = rule_tuple
+
+                #If the protocol of the rule doesn't match current protocol, go to the next rule
+                if protocol != pkt_info['protocol']:
+                    continue
+                else:
+                    # Process all Transport layer rules
+                    transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info) 
+                    if transport_rules == True or transport_rules == False:
+                        pass_pkt = transport_rules
+
+            #Handle DNS Rules
+            if len(rule_tuple) == 3 and pkt_info['protocol'] == "dns":
+                #Only consider well formed DNS requests
+                if pkt_info['valid_dns'] == True:
+                    verdict, dns, domain_name = rule_tuple
+                    dns_rules = self.process_dns_rules(rule, verdict, domain_name, pkt_info['dns_qname'])
+                    if dns_rules == True or dns_rules == False:
+                        pass_pkt = dns_rules
+                else:
+                    return False
+
+        return pass_pkt
+
+
+    def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port):
+        #Find the external port IP of the packet
+        if pkt_dir == PKT_DIR_OUTGOING:
+            pkt_ext_ip_address = pkt_info['dst_ip']
+            pkt_ext_port = pkt_info[protocol + '_dst']
+        else:
+            pkt_ext_ip_address = pkt_info['src_ip']
+            pkt_ext_port = pkt_info[protocol + '_src']
+
+        if self.match_ip_addr(ext_ip_address, pkt_ext_ip_address):
+            if self.match_port(ext_port, pkt_ext_port):
+                if verdict == "pass":
+                    return True
+                else:
+                    return False
+
+        return None
+
+
+
+    def match_ip_addr(self, ext_ip_address, pkt_ext_ip_address):
+        #Case 1: any
+        if ext_ip_address == "any":
+            return True
+
+        #Case 2: 2-byte country code
+        elif len(ext_ip_address) == 2:
+            pkt_country = self.find_country(pkt_ext_ip_address)
+            if pkt_country != None:
+                if ext_ip_address.lower() == pkt_country:
+                    return True
+            return False
+
+        #Case 3: Single IP Address
+        elif ext_ip_address == pkt_ext_ip_address:
+            return True
+
+        #Case 4: IP Prefix
+        elif "/" in ext_ip_address:
+            if self.netmask(ext_ip_address, pkt_ext_ip_address):
+                return True
+            else:
+                return False
+
+        #All other cases
+        else:
+            return False
+
+
+    #Do a binary search to find the country code from geoIP
+    def find_country(pkt_ext_ip_address):
+        return binary_search(self.geoIP, pkt_ext_ip_address)
+
+    def read_geoIP(self, geoIP):
+        line = geoIP.split()
+        min_ip = line[0]
+        maxPip = line[1]
+        country_code = line[2]
+
+    def binary_search_countries(self, geoIP, pkt_ext_ip_address):
+        pkt_ext_ip = stuct.unpack('!L', socket.inet.aton(pkt_ext_ip_address))[0]
+        min_ip = struct.unpack('!L', socket.inet_aton(line[0]))[0]
+        max_ip = strcut.unpack('!L', socket.inet_aton(line[1]))[0]
+        country_code = line[2]
+
+        if len(geoIP) == 0:
+            return None
+        if len(geoIP) == 1:
+            if pkt_ext_ip >= min_ip and pkt_ext_ip <= max_ip:
+                return country_code
+            else:
+                return None
+
+        mid = len(geoIP)//2
+
+        #Packet external IP is larger than max bound
+        if pkt_ext_ip > max_ip:
+            return binary_search_countries(geoIP[mid + 1:len(geoIP)], pkt_ext_ip)
+
+        #Packet external IP is smaller than min bound
+        elif pkt_ext_ip < min_ip:
+            return binary_search_countries(geoIP[0:mid], pkt_ext_ip)
+
+        #Packet external IP is within the this range
+        else:
+            return country_code
+
+
+
+    def netmask(self, ext_ip_range, pkt_ext_ip_address):
+        ip_range = ext_ip_range.split("/")
+        lower_ext_ip_address = ip_range[0]
+        network_mask = ip_range[1]
+        host_bits = 32 - int(network_mask)
+
+        #Find the upper bound of the ip range
+        lower_ext_ip_range = struct.unpack('!L', socket.inet_aton(ext_ip_address))[0]
+        upper_ip = int(lower_ext_ip_range + (host_bits**2 - 1))
+        
+        #Make sure everything is binary
+        lower_ip = struct.unpack('!L', socket.inet_aton(lower_ext_ip_address))
+        pkt_ip_address = struct.unpack('!L', socket.inet_aton(pkt_ext_ip_address))
+
+        if pkt_ip_address >= lower_ip and pkt_ip_address <= upper_ip:
+            return True
+        else:
+            return False
+
+
+    def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
+        if self.regex_interpreter(domain_name, pkt_domain_name):
+            if verdict == "pass":
+                return True
+            else:
+                return False
+        else:
+            return None
+
+
+    def regex_interpreter(self, domain_name, pkt_domain_name):
+        #Check if two domain names match
+        if domain_name == pkt_domain_name:
+            return True
+
+        #Handle regex's
+        elif '*' in domain_name:
+            #Make sure regex is well formed
+            if '*' != domain_name[0]:
+                return False
+            else:
+                if domain_name[1:len(domain_name)] in pkt_domain_name:
+                    return True
+
+        else:
+            return False
+
+
+    """
+    =======================================================================================
+    The following functions deal with reading the necessary information from the 
+    incoming packet
+    =======================================================================================
+    
+    """
 
 
     def read_pkt(self, pkt):
@@ -110,7 +281,7 @@ class Firewall:
         #Find the total length of the packet
         pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])
 
-        if validate_ip(header_len, total_len):
+        if self.validate_ip(pkt_specs['header_len'], pkt_specs['total_len'], pkt):
             #IP header is valid
             pkt_specs['valid'] = True
 
@@ -123,7 +294,7 @@ class Firewall:
         return pkt_specs
 
 
-    def validate_ip(self, header_len, total_len):
+    def validate_ip(self, header_len, total_len, pkt):
         #Check if header meet minimum length requirments
         if header_len < 5:
             return False
@@ -179,7 +350,7 @@ class Firewall:
         domain_name = ""
         labels = 0
         qname_len = 0
-        dns_questions_payload[pkt[dns_questions:len(pkt)]
+        dns_questions_payload = pkt[dns_questions:len(pkt)]
 
         for byte in dns_questions_payload:
             curr = struct.unpack('!B', dns_questions)[0]
@@ -189,7 +360,7 @@ class Firewall:
 
             #Just started or finished looking through the last sequence of bytes
             elif labels != 0:
-                dns_domain += chr(curr)
+                domain_name += chr(curr)
                 num_labels -= 1
 
             else:
@@ -197,71 +368,9 @@ class Firewall:
                 qname_len = qname_len + curr + 1 #add an extra 1 to acccount for the first label
                 #Add in period between groups of labels
                 if len(domain_name) > 0:
-                    domain_name + "."
+                    domain_name += "."
 
         return domain_name, qname_len + 1
-
-
-        pkt_src_ip = pkt[12:16]
-        pkt_dst_ip = pkt[16:20]
-        pkt_protocol = pkt[9:10]
-        pkt_ipid, = struct.unpack('!H', pkt[4:6])    # IP identifier (big endian)
-
-        if pkt_protocol == self.TCP:
-            pkt_header = pkt[24:44]
-            pkt_dst_port = pkt_header[2:4]
-        elif pkt_protocol == self.UDP:
-            pkt_header = pkt[24:28]
-            pkt_dst_port = pkt_header[2:4]
-        elif pkt_protocol == self.ICMP:
-            pkt_header = pkt[24:25]
-            pkt_dst_port = None
-        else:
-            raise Exception("Unknown pkt_protocol: " + str(pkt_protocol))
-
-        self.protocol_map = {
-            'tcp': self.TCP,
-            'udp': self.UDP,
-            'icmp': self.ICMP,
-        }
-
-        for rule in self.rules:
-            # create tokens and convert them all to lower case
-            rule_tuple = tuple([t.lower() for t in rule.split()])
-
-            if len(rule_tuple) == 4:
-                # Protocol/IP/Port rules
-                verdict, protocol, external_ip_address, external_port = rule_tuple
-                external_ip_address = struct.unpack("!L", external_ip_address)
-
-                # protocol
-                if self.protocol_map[protocol] != pkt_protocol:
-                    continue
-
-                # external IP address
-                if external_ip_address == "any":
-                    pass
-                elif ip2long(external_ip_address) != pkt_dst_ip:
-                    continue
-                else:
-                    # country code
-                    raise NotImplementedError
-
-                # external port
-                if external_port == "any":
-                    pass
-                elif int(pkt_dst_port) not in port_range(external_port):
-                    continue
-                else:
-                    raise Exception("Invalid port specified in rules: " + external_port)
-            elif len(rule_tuple) == 3 and protocol == self.UDP:
-                # DNS Rules
-                verdict, dns, domain_name = rule_tuple
-                if domain_name[0] == '*':
-                    pass
-                # elif domain_name == packet domain name
-            else:
-                raise Exception("Invalid rule specified '" + rule + "'")
 
     # TODO: You can add more methods as you want.
 
