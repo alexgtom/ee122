@@ -3,6 +3,7 @@
 from main import PKT_DIR_INCOMING, PKT_DIR_OUTGOING
 
 import struct
+import socket
 
 # TODO: Feel free to import any Python standard moduless as necessary.
 # (http://docs.python.org/2/library/)
@@ -51,9 +52,9 @@ class Firewall:
         # TODO: Your main firewall code will be here.
         if self.handle_rules(pkt_dir, pkt):
             if pkt_dir == PKT_DIR_OUTGOING:
-                self.self.iface_ext.send_ip_packet(pkt)
+                self.iface_ext.send_ip_packet(pkt)
             else:
-                self.self.iface_int.send_ip_packet(pkt)
+                self.iface_int.send_ip_packet(pkt)
 
 
     """
@@ -69,6 +70,8 @@ class Firewall:
 
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
+        if pkt_info == None:
+            return False
 
         #If packet is not well formed, drop it
         if pkt_info['valid'] != True:
@@ -81,9 +84,9 @@ class Firewall:
         #Pass all DNS packets that fall outside the scope of the project
         if pkt_info['protocol'] == "dns":
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
-                return True
+                return False
             if pkt_info['dns_qclass'] != 1:
-                return True
+                return False
 
         #Handle all of the rules
         for rule in self.rules:
@@ -100,7 +103,7 @@ class Firewall:
                     continue
                 else:
                     # Process all Transport layer rules
-                    transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info) 
+                    transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info, pkt_dir) 
                     if transport_rules == True or transport_rules == False:
                         pass_pkt = transport_rules
 
@@ -109,16 +112,20 @@ class Firewall:
                 #Only consider well formed DNS requests
                 if pkt_info['valid_dns'] == True:
                     verdict, dns, domain_name = rule_tuple
-                    dns_rules = self.process_dns_rules(rule, verdict, domain_name, pkt_info['dns_qname'])
-                    if dns_rules == True or dns_rules == False:
+                    dns_rules = self.process_dns_rules(verdict, domain_name, pkt_info['dns_qname'])
+                    if dns_rules == True:
                         pass_pkt = dns_rules
+                    else:
+                        return False
                 else:
                     return False
-
+        print pkt_info
+        print pass_pkt
         return pass_pkt
 
 
-    def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port):
+    def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port,
+                                pkt_info, pkt_dir):
         #Find the external port IP of the packet
         if pkt_dir == PKT_DIR_OUTGOING:
             pkt_ext_ip_address = pkt_info['dst_ip']
@@ -197,23 +204,19 @@ class Firewall:
 
 
     #Do a binary search to find the country code from geoIP
-    def find_country(pkt_ext_ip_address):
-        return binary_search(self.geoIP, pkt_ext_ip_address)
-
-    def read_geoIP(self, geoIP):
-        line = geoIP.split()
-        min_ip = line[0]
-        maxPip = line[1]
-        country_code = line[2]
+    def find_country(self, pkt_ext_ip_address):
+        return self.binary_search_countries(self.geoIP, pkt_ext_ip_address)
 
     def binary_search_countries(self, geoIP, pkt_ext_ip_address):
-        pkt_ext_ip = stuct.unpack('!L', socket.inet.aton(pkt_ext_ip_address))[0]
-        min_ip = struct.unpack('!L', socket.inet_aton(line[0]))[0]
-        max_ip = strcut.unpack('!L', socket.inet_aton(line[1]))[0]
-        country_code = line[2]
-
         if len(geoIP) == 0:
             return None
+
+        line = geoIP[0].split()
+        pkt_ext_ip = pkt_ext_ip_address
+        min_ip = struct.unpack('!L', socket.inet_aton(line[0]))[0]
+        max_ip = struct.unpack('!L', socket.inet_aton(line[1]))[0]
+        country_code = line[2]
+
         if len(geoIP) == 1:
             if pkt_ext_ip >= min_ip and pkt_ext_ip <= max_ip:
                 return country_code
@@ -224,11 +227,11 @@ class Firewall:
 
         #Packet external IP is larger than max bound
         if pkt_ext_ip > max_ip:
-            return binary_search_countries(geoIP[mid + 1:len(geoIP)], pkt_ext_ip)
+            return self.binary_search_countries(geoIP[mid + 1:len(geoIP)], pkt_ext_ip)
 
         #Packet external IP is smaller than min bound
         elif pkt_ext_ip < min_ip:
-            return binary_search_countries(geoIP[0:mid], pkt_ext_ip)
+            return self.binary_search_countries(geoIP[0:mid], pkt_ext_ip)
 
         #Packet external IP is within the this range
         else:
@@ -256,13 +259,15 @@ class Firewall:
 
 
     def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
-        if self.regex_interpreter(domain_name, pkt_domain_name):
+        print domain_name, pkt_domain_name
+        if self.regex_interpreter(domain_name, pkt_domain_name) != None:
             if verdict == "pass":
                 return True
             else:
                 return False
         else:
-            return None
+            # no dns rules match, pass packet
+            return True
 
 
     def regex_interpreter(self, domain_name, pkt_domain_name):
@@ -280,7 +285,7 @@ class Firewall:
                     return True
 
         else:
-            return False
+            return None
 
 
     """
@@ -299,7 +304,7 @@ class Firewall:
 
         #If packet is too short, it is corrupted
         if len(pkt) < 8:
-            return False
+            return None
 
         #Find the version number/Header length
         version_and_length = struct.unpack('!B', pkt[0:1])[0]
@@ -307,7 +312,7 @@ class Firewall:
         pkt_specs['header_len'] = version_and_length & 0b00001111
 
         #Find the total length of the packet
-        pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])
+        pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])[0]
 
         if self.validate_ip(pkt_specs['header_len'], pkt_specs['total_len'], pkt):
             #IP header is valid
@@ -343,28 +348,28 @@ class Firewall:
 
         #TCP Protocol
         if protocol == 6:
-            pkt_info['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
-            pkt_info['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
+            pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
+            pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
             return "tcp"
 
         #UDP Protocol
         if protocol == 17:
-            pkt_info['udp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
-            pkt_info['udp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
+            pkt_specs['udp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
+            pkt_specs['udp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
 
             #Check if the UDP packet contains a DNS packet
-            if pckt_info['udp_dst'] == 53:
-                DNS_header = protocol_header + 8
-                QDCOUNT = struct.unpack('!H', pkt[DNS_header + 4:DNS_header + 6])[0]
+            if pkt_specs['udp_dst'] == 53:
+                dns_header = protocol_header + 8
+                QDCOUNT = struct.unpack('!H', pkt[dns_header + 4:dns_header + 6])[0]
 
                 if QDCOUNT != 1:
                     #invalidate the packet
                     pkt_specs['valid_dns'] = False
                 else:
                     pkt_specs['valid_dns'] = True
-                    DNS_questions = DNS_header + 12
-                    pkt_specs['dns_qname'], qname_len = self.find_qname(pkt, DNS_questions)
-                    DNS_qtype_location = DNS_questions + qname_len
+                    dns_questions = dns_header + 12
+                    pkt_specs['dns_qname'], qname_len = self.find_qname(pkt, dns_questions)
+                    DNS_qtype_location = dns_questions + qname_len
                     pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
                     pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
                 return "dns"
@@ -381,7 +386,7 @@ class Firewall:
         dns_questions_payload = pkt[dns_questions:len(pkt)]
 
         for byte in dns_questions_payload:
-            curr = struct.unpack('!B', dns_questions)[0]
+            curr = struct.unpack('!B', byte)[0]
             #Reached the end of the domain name
             if curr == 0:
                 break
@@ -389,7 +394,7 @@ class Firewall:
             #Just started or finished looking through the last sequence of bytes
             elif labels != 0:
                 domain_name += chr(curr)
-                num_labels -= 1
+                labels -= 1
 
             else:
                 labels = curr
