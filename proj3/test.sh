@@ -1,5 +1,5 @@
 #!/bin/bash
-VERBOSE=0
+VERBOSE=1
 
 echo "*** Running tests ..."
 
@@ -41,10 +41,10 @@ assert_fail "grep nosuchpattern /etc/passwd"
 assert_pass "ls"
 
 # dns tests
-assert_fail "dig peets.com +time=1"
-assert_fail "dig asdf.peets.com +time=1"
-assert_pass "dig google.com +time=1"
-assert_pass "ping -t 1 -c 1 google.com"
+assert_fail "dig peets.com"
+assert_fail "dig asdf.peets.com"
+assert_pass "dig google.com"
+assert_pass "ping -c 1 google.com"
 
 # We pass all tests
 echo "*** -----------------------------------------------------"
