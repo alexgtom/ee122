@@ -29,8 +29,6 @@ assert_fail() {
     rc=$?
     if [ $rc == 0 ]; then
         echo "FAIL: Expected return code to be anything except 0 for '$command'"
-        # kill firewall
-        sudo kill $!
         exit 1
     fi
 }
