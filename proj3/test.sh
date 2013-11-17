@@ -1,13 +1,6 @@
 #!/bin/bash
 VERBOSE=0
 
-# start firewall and run it in the background
-echo "*** Starting firewall ..."
-sudo python main.py &
-
-# wait for firewall to load
-sleep 3
-
 echo "*** Running tests ..."
 
 assert_pass() {
@@ -21,8 +14,6 @@ assert_pass() {
     rc=$?
     if [ $rc != 0 ]; then
         echo "FAIL: Expected return code to be 0 for '$command'"
-        # kill firewall
-        sudo kill $!
         exit 1
     fi
 }
@@ -60,6 +51,3 @@ assert_pass "ping -t 1 -c 1 google.com"
 # We pass all tests
 echo "*** -----------------------------------------------------"
 echo "*** ALL TESTS PASSED"
-
-# kill firewall
-sudo kill $!
