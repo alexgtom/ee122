@@ -122,10 +122,16 @@ class Firewall:
         #Find the external port IP of the packet
         if pkt_dir == PKT_DIR_OUTGOING:
             pkt_ext_ip_address = pkt_info['dst_ip']
-            pkt_ext_port = pkt_info[protocol + '_dst']
+            if protocol == "icmp":
+                pkt_ext_port = pkt_info[protocol + "_type"]
+            else:
+                pkt_ext_port = pkt_info[protocol + '_dst']
         else:
             pkt_ext_ip_address = pkt_info['src_ip']
-            pkt_ext_port = pkt_info[protocol + '_src']
+            if protocol == "icmp":
+                pkt_ext_port = pkt_info[protocol + "_type"]
+            else:
+                pkt_ext_port = pkt_info[protocol + '_src']
 
         if self.match_ip_addr(ext_ip_address, pkt_ext_ip_address):
             if self.match_port(ext_port, pkt_ext_port):
@@ -135,6 +141,29 @@ class Firewall:
                     return False
 
         return None
+
+
+    def match_port(self, ext_port, pkt_ext_port):
+        #Case 1: any
+        if ext_port == "any":
+            return True
+
+        #Case 2: a single value
+        elif ext_port == str(pkt_ext_port):
+            return True
+
+        #Case 3: a range    
+        elif '-' in ext_port:
+            port_range = ext_port.split('-')
+            min_port = port_range[0]
+            max_port = port_range[1]
+            if pkt_ext_port >= min_port and pkt_ext_port <= max_port:
+                return True
+            else:
+                return False
+
+        return False
+
 
 
 
@@ -204,7 +233,6 @@ class Firewall:
         #Packet external IP is within the this range
         else:
             return country_code
-
 
 
     def netmask(self, ext_ip_range, pkt_ext_ip_address):
