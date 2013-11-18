@@ -6,6 +6,12 @@ import struct
 import socket
 import random
 
+DEBUG = True
+
+def debug(s):
+    if DEBUG == True:
+        print s
+
 # TODO: Feel free to import any Python standard moduless as necessary.
 # (http://docs.python.org/2/library/)
 # You must NOT use any 3rd-party libraries, though.
@@ -65,6 +71,9 @@ class Firewall:
                 self.iface_ext.send_ip_packet(pkt)
             else:
                 self.iface_int.send_ip_packet(pkt)
+            debug(True)
+        else:
+            debug(False)
 
 
     """
@@ -80,6 +89,7 @@ class Firewall:
 
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
+        debug(pkt_info)
         if pkt_info == None:
             return False
 
@@ -100,6 +110,7 @@ class Firewall:
 
         #Handle all of the rules
         for rule in self.rules:
+            debug(rule)
             # TODO: Do shit here to make all of the rules work :((((
             rule_tuple = tuple([t.lower() for t in rule.split()])
 
@@ -366,19 +377,22 @@ class Firewall:
 
             #Check if the UDP packet contains a DNS packet
             if pkt_specs['udp_dst'] == 53:
-                dns_header = protocol_header + 8
-                QDCOUNT = struct.unpack('!H', pkt[dns_header + 4:dns_header + 6])[0]
+                try: 
+                    dns_header = protocol_header + 8
+                    QDCOUNT = struct.unpack('!H', pkt[dns_header + 4:dns_header + 6])[0]
 
-                if QDCOUNT != 1:
-                    #invalidate the packet
+                    if QDCOUNT != 1:
+                        #invalidate the packet
+                        pkt_specs['valid_dns'] = False
+                    else:
+                        pkt_specs['valid_dns'] = True
+                        dns_questions = dns_header + 12
+                        pkt_specs['dns_qname'], qname_len = self.find_qname(pkt, dns_questions)
+                        DNS_qtype_location = dns_questions + qname_len
+                        pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
+                        pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
+                except Exception:
                     pkt_specs['valid_dns'] = False
-                else:
-                    pkt_specs['valid_dns'] = True
-                    dns_questions = dns_header + 12
-                    pkt_specs['dns_qname'], qname_len = self.find_qname(pkt, dns_questions)
-                    DNS_qtype_location = dns_questions + qname_len
-                    pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
-                    pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
                 return "dns"
 
             return "udp"
