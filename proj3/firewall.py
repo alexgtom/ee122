@@ -84,9 +84,9 @@ class Firewall:
         #Pass all DNS packets that fall outside the scope of the project
         if pkt_info['protocol'] == "dns":
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
-                return False
+                return True
             if pkt_info['dns_qclass'] != 1:
-                return False
+                return True
 
         #Handle all of the rules
         for rule in self.rules:
@@ -245,7 +245,7 @@ class Firewall:
         host_bits = 32 - int(network_mask)
 
         #Find the upper bound of the ip range
-        lower_ext_ip_range = struct.unpack('!L', socket.inet_aton(ext_ip_address))[0]
+        lower_ext_ip_range = struct.unpack('!L', socket.inet_aton(lower_ext_ip_address))[0]
         upper_ip = int(lower_ext_ip_range + (host_bits**2 - 1))
         
         #Make sure everything is binary
