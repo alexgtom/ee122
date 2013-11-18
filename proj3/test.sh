@@ -53,10 +53,15 @@ assert_pass "ping -c 1 google.com"
 # drop udp any any
 # pass udp 8.8.8.8 53
 # pass udp 8.8.4.4 53
-assert_pass "echo 'hello' | nc -u -w1 8.8.8.8 53"
-assert_pass "echo 'hello' | nc -u -w1 8.8.4.4 53"
+# pass udp 8.8.4.4 100
+
+# malformed udb packets
+assert_fail "echo 'hello' | nc -u -w1 8.8.8.8 53"
+assert_fail "echo 'hello' | nc -u -w1 8.8.4.4 53"
 assert_fail "echo 'hello' | nc -u -w1 8.8.4.4 10"
 assert_fail "echo 'hello' | nc -u -w1 9.9.9.9 10"
+
+assert_pass "echo 'hello' | nc -u -w1 8.8.4.4 100"
 
 # % allow only HTTP(80), HTTPS(443), and Skype(1024-65535)
 # drop tcp any any
