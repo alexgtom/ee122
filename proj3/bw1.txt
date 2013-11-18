@@ -1,0 +1,16 @@
+Bells and Whistles 1: Packet Size Distribution
+Jason Jia: ee122-ed
+Alex Tom: ee122-ki
+
+How long was the measurement period? How many packets did you measure in total?
+
+	We measured 92639 packets in total for 30 minutes
+
+What did you mostly do during the period?
+
+	At first we tried watching Youtube videos (I would not recommend this). But, each video took a while to buffer and loaded slowly. So, after a while we just browsed reddit and 9gag.
+
+What does the distribution look like? Why does it show such a distribution?
+	
+	The distrubtion shows two clear peaks at the small and large end in terms of packet sizes. It shows this ditribution because the smaller packets (1 - 100B) are probably all SYN's, ACK's, get requests, etc. These small packets represent the overhead in setting up connections between other servers and transmitting information. There a lot of these packets since they are required everytime we visited a new website or loaded a new image.
+	There is another peak in the 1451 - 1500B bucket. This makes sense since after the connection is set up, most packets that are trasnmitted will be filled with information and thus take up the maximum possible size of the packet. There are a lot of these because we needed a lot of information to stream Youtube videos and display the pictures on reddit andd 9gag.
