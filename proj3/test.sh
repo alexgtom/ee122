@@ -53,30 +53,30 @@ assert_pass "ping -c 1 google.com"
 # drop udp any any
 # pass udp 8.8.8.8 53
 # pass udp 8.8.4.4 53
-assert_pass "nc -u -w1 8.8.8.8 53"
-assert_pass "nc -u -w1 8.8.4.4 53"
-assert_fail "nc -u -w1 8.8.4.4 10"
-assert_fail "nc -u -w1 9.9.9.9 10"
+assert_pass "echo 'hello' | nc -u -w1 8.8.8.8 53"
+assert_pass "echo 'hello' | nc -u -w1 8.8.4.4 53"
+assert_fail "echo 'hello' | nc -u -w1 8.8.4.4 10"
+assert_fail "echo 'hello' | nc -u -w1 9.9.9.9 10"
 
 # % allow only HTTP(80), HTTPS(443), and Skype(1024-65535)
 # drop tcp any any
 # pass tcp any 80
 # pass tcp any 443
 # pass tcp any 1024-65535
-assert_pass "nc 8.8.8.8 80"
-assert_pass "nc 8.8.8.8 443"
-assert_pass "nc 8.8.8.8 1024"
-assert_pass "nc 8.8.8.8 65535"
-assert_pass "nc 8.8.8.8 30000"
-assert_fail "nc 8.8.8.8 53"
-assert_fail "nc 9.9.9.9 53"
+assert_pass "nc -w1 8.8.8.8 80"
+assert_pass "nc -w1 8.8.8.8 443"
+assert_pass "nc -w1 8.8.8.8 1024"
+assert_pass "nc -w1 8.8.8.8 65535"
+assert_pass "nc -w1 8.8.8.8 30000"
+assert_fail "nc -w1 8.8.8.8 53"
+assert_fail "nc -w1 9.9.9.9 53"
 
 # % punish Italy (for not having Starbucks) and MIT (for the greedy /8 address block)
 # drop tcp it any
 # drop tcp 18.0.0.0/8 any
-assert_fail "nc 18.0.0.0 53"
-assert_fail "nc 2.16.70.0 53"
-assert_fail "nc 2.16.71.255 53"
+assert_fail "nc -w1 18.0.0.0 53"
+assert_fail "nc -w1 2.16.70.0 53"
+assert_fail "nc -w1 2.16.71.255 53"
 
 # % ahem
 # drop dns peets.com

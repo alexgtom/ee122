@@ -82,7 +82,7 @@ class Firewall:
             return True
 
         #Pass all DNS packets that fall outside the scope of the project
-        if pkt_info['protocol'] == "dns":
+        if pkt_info['protocol'] == "dns" and pkt_info['valid_dns'] == True:
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
                 return True
             if pkt_info['dns_qclass'] != 1:
@@ -108,7 +108,7 @@ class Firewall:
                         pass_pkt = transport_rules
 
             #Handle DNS Rules
-            if len(rule_tuple) == 3 and pkt_info['protocol'] == "dns":
+            elif len(rule_tuple) == 3 and pkt_info['protocol'] == "dns":
                 #Only consider well formed DNS requests
                 if pkt_info['valid_dns'] == True:
                     verdict, dns, domain_name = rule_tuple
@@ -119,8 +119,6 @@ class Firewall:
                         return False
                 else:
                     return False
-        print pkt_info
-        print pass_pkt
         return pass_pkt
 
 
@@ -162,14 +160,14 @@ class Firewall:
         #Case 3: a range    
         elif '-' in ext_port:
             port_range = ext_port.split('-')
-            min_port = port_range[0]
-            max_port = port_range[1]
-            if pkt_ext_port >= min_port and pkt_ext_port <= max_port:
+            min_port = int(port_range[0])
+            max_port = int(port_range[1])
+            if int(pkt_ext_port) >= min_port and int(pkt_ext_port) <= max_port:
                 return True
             else:
                 return False
-
-        return False
+        else:
+            return False
 
 
 
@@ -259,7 +257,6 @@ class Firewall:
 
 
     def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
-        print domain_name, pkt_domain_name
         if self.regex_interpreter(domain_name, pkt_domain_name) != None:
             if verdict == "pass":
                 return True
