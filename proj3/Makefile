@@ -1,7 +1,6 @@
 VMHOST = 172.16.122.2
 
 sync:
-	ssh ee122@$(VMHOST) 'sudo killall python'
 	rsync -rv . ee122@$(VMHOST):~/proj3
 
 test: sync
@@ -9,6 +8,9 @@ test: sync
 
 firewall:
 	sudo killall python; cd proj3; sudo ./main.py
+
+bypass:
+	sudo killall python; cd proj3; sudo ./main.py --mode bypass
 
 # runs the firewall forever even if killed
 forever:
