@@ -6,7 +6,7 @@ import struct
 import socket
 import random
 
-DEBUG = True
+DEBUG = False
 
 def debug(s):
     if DEBUG == True:
