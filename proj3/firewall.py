@@ -4,6 +4,7 @@ from main import PKT_DIR_INCOMING, PKT_DIR_OUTGOING
 
 import struct
 import socket
+import random
 
 # TODO: Feel free to import any Python standard moduless as necessary.
 # (http://docs.python.org/2/library/)
@@ -18,6 +19,9 @@ class Firewall:
         self.timer = timer
         self.iface_int = iface_int
         self.iface_ext = iface_ext
+        self.loss_mode = config.has_key("loss")
+        if self.loss_mode:
+            self.loss_rate = int(config["loss"])
 
 
         # TODO: Load the firewall rules (from rule_filename) here.
@@ -50,6 +54,12 @@ class Firewall:
     # @pkt: the actual data of the IPv4 packet (including IP header)
     def handle_packet(self, pkt_dir, pkt):
         # TODO: Your main firewall code will be here.
+        if self.loss_mode:
+            loss = 100 * random.random()
+            if self.loss_rate > loss:
+                #Drop the packet
+                return
+
         if self.handle_rules(pkt_dir, pkt):
             if pkt_dir == PKT_DIR_OUTGOING:
                 self.iface_ext.send_ip_packet(pkt)

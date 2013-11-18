@@ -1,0 +1,5 @@
+Bells and Whistles 2: Loss Simulation
+Jason Jia: ee122-ed
+Alex Tom: ee1222-ki
+
+	The loss simluation showed that the higher the loss rate is, the lower TCP throughput is. This makes sense, since each loss represents a packet being dropped. This will either cause a dupack, or a timeout. In either case, throughput would be reduced. If a packet loss causes dupacks, this may cause the sender's congestion window and SSTRESTH to both get cut in half. The sender would then have to use congestion avoidance with additive increase from that point on, which slows down throughput. On the other hand, if a packet loss causes a timeout, the sender's congestion window will decrease to one packet. The sender would then enter its slow start phase causing throughput to drastically drop. If the loss rate is high, the sender is more likely to spend more of its time in its slow start phase, making it so that it would rarely ever reach its maximum potential throughput.
