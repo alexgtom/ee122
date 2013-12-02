@@ -85,7 +85,7 @@ class Firewall:
     """
 
     def handle_rules(self, pkt_dir, pkt):
-        pass_pkt = False
+        pass_pkt = True
 
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
