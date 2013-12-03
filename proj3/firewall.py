@@ -70,7 +70,8 @@ class Firewall:
                 #Drop the packet
                 return
 
-        verdict, protocol = self.handle_rules(pkt_dir, pkt)
+        verdict, pkt_info = self.handle_rules(pkt_dir, pkt)
+        protocol = pkt_info['protocol']
         if verdict == PASS:
             if pkt_dir == PKT_DIR_OUTGOING:
                 self.iface_ext.send_ip_packet(pkt)
@@ -80,11 +81,68 @@ class Firewall:
         elif verdict == DENY:
             if protocol == "tcp":
                 #TODO: Send a TCP RST packet
+                packet = self.make_RST_pkt(pkt_info)
+                self.iface_ext.send_ip_packet(packet)
             elif protocol == "dns":
                 #TODO: Send a DNS response packet
+                packet = self.make_DNS_response(pkt_info)
+                self.iface_int.send_ip_packet(packet)
             debug(True)
         else:
             debug(False)
+
+
+    def make_RST_pkt(self, pkt_info):
+        packet = ""
+        #Version + header length
+        version_headerlen = struct.pack('!B', 0x45)
+        #Type of service
+        tos = struct.pack('!B', pkt_info['tos'])
+        #ID
+        identification = struct.pack('!H', pkt_info['ip_id'])
+        #Fragment info (Do not fragment, fragment offset = 0)
+        fragment_info = struct.pack('!H', 0x40)
+        #TTL (default of 64)
+        ttl = struct.pack('!B', 0x40)
+        #protocol (TCP - 6)
+        protocol = struct.pack('!B', 0x06)
+        #Source address
+        src_ip = struct.pack('!L', pkt_info['dst_ip'])
+        #destination address
+        dst_ip = struct.pack('!L', pkt_info['src_ip'])
+        #header checksum
+        ip_checksum = self.calculate_ip_checksum()
+        #Total length
+            #DO STUFF HERE
+        #TCP source port
+        src_port = struct.pack('!H', pkt_info['tcp_dst'])
+        #TCP destination port
+        dst_port = struct.pack('!H', pkt_info['tcp_src'])
+        #sequence number
+        seq_num = struct.pack('!L', 0x00000000)
+        #ack number
+        ack_num = struck.pack('!L', pkt_info['seq_num'])
+        #offset and reserved
+        offset_reserve = struct.pack('!B', 0x50)
+        #TCP Flag (RST = 0x04)
+        rst = struct.pack('!B', 0x04)
+        #tcp window
+        window = struct.pack('!H', 0x0000)
+        #TCP checksum
+        tcp_cehcksum = self.calculate_tcp_checksum()
+        #urgent pointer
+        urgent = struct.pack('!H', 0x0000)
+
+
+
+    def calculate_ip_checksum(self, ):
+        pass
+
+    def calculate_tcp_checksum(self, pkt):
+        pass
+
+    def make_DNS_response(self, pkt):
+        pass
 
 
     """
@@ -99,25 +157,26 @@ class Firewall:
 
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
-        pkt_protocol = pkt_info['protocol']
         debug(pkt_info)
         if pkt_info == None:
-            return False
+            return DROP, pkt_info
+
+        pkt_protocol = pkt_info['protocol']
 
         #If packet is not well formed, drop it
         if pkt_info['valid'] != True:
-            return False
+            return DROP, pkt_info
 
         #Pass all packets that aren't using ICMP, TCP, or UDP
         if pkt_info['protocol'] == "other":
-            return True
+            return PASS, pkt_info
 
         #Pass all DNS packets that fall outside the scope of the project
         if pkt_protocol == "dns" and pkt_info['valid_dns'] == True:
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
-                return True
+                return PASS, pkt_info
             if pkt_info['dns_qclass'] != 1:
-                return True
+                return PASS, pkt_info
 
         #Handle all of the rules
         for rule in self.rules:
@@ -148,8 +207,8 @@ class Firewall:
                     if dns_rules != NO_MATCH:
                         pass_pkt = dns_rules
                 else:
-                    return DROP
-        return pass_pkt, pkt_protocol
+                    return DROP, pkt_info
+        return pass_pkt, pkt_info
 
 
     def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port,
@@ -342,6 +401,8 @@ class Firewall:
         pkt_specs['version'] = version_and_length >> 4
         pkt_specs['header_len'] = version_and_length & 0b00001111
 
+        pkt_specs['tos'] = struct.unpack('!B', pkt[1:2])[0]
+
         #Find the total length of the packet
         pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])[0]
 
@@ -381,6 +442,7 @@ class Firewall:
         if protocol == 6:
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
+            pkt_specs['seq_num'] = struct.unpack('!L', pkt[protocol_header + 4:protocol_header + 8])[0]
             return "tcp"
 
         #UDP Protocol
