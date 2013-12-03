@@ -7,6 +7,10 @@ import socket
 import random
 
 DEBUG = False
+PASS = 0
+DROP = 1
+DENY = 2
+NO_MATCH = 3
 
 def debug(s):
     if DEBUG == True:
@@ -66,11 +70,18 @@ class Firewall:
                 #Drop the packet
                 return
 
-        if self.handle_rules(pkt_dir, pkt):
+        verdict, protocol = self.handle_rules(pkt_dir, pkt)
+        if verdict == PASS:
             if pkt_dir == PKT_DIR_OUTGOING:
                 self.iface_ext.send_ip_packet(pkt)
             else:
                 self.iface_int.send_ip_packet(pkt)
+            debug(True)
+        elif verdict == DENY:
+            if protocol == "tcp":
+                #TODO: Send a TCP RST packet
+            elif protocol == "dns":
+                #TODO: Send a DNS response packet
             debug(True)
         else:
             debug(False)
@@ -81,14 +92,14 @@ class Firewall:
     The following functions deal with processing rules and comparing information from the
     packet that was recieved against the rules.
     =======================================================================================
-
     """
 
     def handle_rules(self, pkt_dir, pkt):
-        pass_pkt = True
+        pass_pkt = PASS
 
         #Pull all the relavant information out of the packet
         pkt_info = self.read_pkt(pkt)
+        pkt_protocol = pkt_info['protocol']
         debug(pkt_info)
         if pkt_info == None:
             return False
@@ -102,7 +113,7 @@ class Firewall:
             return True
 
         #Pass all DNS packets that fall outside the scope of the project
-        if pkt_info['protocol'] == "dns" and pkt_info['valid_dns'] == True:
+        if pkt_protocol == "dns" and pkt_info['valid_dns'] == True:
             if pkt_info['dns_qtype'] != 1 and pkt_info['dns_qtype'] != 28:
                 return True
             if pkt_info['dns_qclass'] != 1:
@@ -120,27 +131,25 @@ class Firewall:
                 verdict, protocol, ext_ip_address, ext_port = rule_tuple
 
                 #If the protocol of the rule doesn't match current protocol, go to the next rule
-                if protocol != pkt_info['protocol']:
+                if protocol != pkt_protocol:
                     continue
                 else:
                     # Process all Transport layer rules
                     transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info, pkt_dir) 
-                    if transport_rules == True or transport_rules == False:
+                    if transport_rules != NO_MATCH:
                         pass_pkt = transport_rules
 
             #Handle DNS Rules
-            elif len(rule_tuple) == 3 and pkt_info['protocol'] == "dns":
+            elif len(rule_tuple) == 3 and pkt_protocol == "dns":
                 #Only consider well formed DNS requests
                 if pkt_info['valid_dns'] == True:
                     verdict, dns, domain_name = rule_tuple
                     dns_rules = self.process_dns_rules(verdict, domain_name, pkt_info['dns_qname'])
-                    if dns_rules == True:
+                    if dns_rules != NO_MATCH:
                         pass_pkt = dns_rules
-                    else:
-                        return False
                 else:
-                    return False
-        return pass_pkt
+                    return DROP
+        return pass_pkt, pkt_protocol
 
 
     def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port,
@@ -162,11 +171,13 @@ class Firewall:
         if self.match_ip_addr(ext_ip_address, pkt_ext_ip_address):
             if self.match_port(ext_port, pkt_ext_port):
                 if verdict == "pass":
-                    return True
+                    return PASS
+                elif verdict == "drop":
+                    return DROP
                 else:
-                    return False
+                    return DENY
 
-        return None
+        return NO_MATCH
 
 
     def match_port(self, ext_port, pkt_ext_port):
@@ -280,12 +291,14 @@ class Firewall:
     def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
         if self.regex_interpreter(domain_name, pkt_domain_name) != None:
             if verdict == "pass":
-                return True
+                return PASS
+            elif verdict == "drop":
+                return DROP
             else:
-                return False
+                return DENY
         else:
-            # no dns rules match, pass packet
-            return True
+            # no dns rules match
+            return NO_MATCH
 
 
     def regex_interpreter(self, domain_name, pkt_domain_name):
