@@ -224,7 +224,8 @@ class Firewall:
 
     #Do a binary search to find the country code from geoIP
     def find_country(self, pkt_ext_ip_address):
-        return self.binary_search_countries(self.geoIP, pkt_ext_ip_address)
+        ip_num = struct.unpack('!L', socket.inet_aton(pkt_ext_ip_address))[0]
+        return self.binary_search_countries(self.geoIP, ip_num)
 
     def binary_search_countries(self, geoIP, pkt_ext_ip_address):
         if len(geoIP) == 0:
@@ -232,8 +233,9 @@ class Firewall:
 
         line = geoIP[0].split()
         pkt_ext_ip = pkt_ext_ip_address
+        mid = len(geoIP)//2
         min_ip = struct.unpack('!L', socket.inet_aton(line[0]))[0]
-        max_ip = struct.unpack('!L', socket.inet_aton(line[1]))[0]
+        max_ip = struct.unpack('!L', socket.inet_aton(geoIP[mid].split()[1]))[0]
         country_code = line[2]
 
         if len(geoIP) == 1:
@@ -254,7 +256,7 @@ class Firewall:
 
         #Packet external IP is within the this range
         else:
-            return country_code
+            return self.binary_search_countries(geoIP[0:mid], pkt_ext_ip)
 
 
     def netmask(self, ext_ip_range, pkt_ext_ip_address):
