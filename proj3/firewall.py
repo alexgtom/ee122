@@ -20,6 +20,26 @@ def debug(s):
 # (http://docs.python.org/2/library/)
 # You must NOT use any 3rd-party libraries, though.
 
+def get_http_log_data(incoming_stream, outgoing_stream):
+    """
+    Returns the string to write to log file
+    """
+    outgoing_lines = [line.split() for line in outgoing_stream.split('\n')]
+    host_name = outgoing_lines[1][1]
+    method = outgoing_lines[0][0]
+    path = outgoing_lines[0][1]
+    version = outgoing_lines[0][2]
+
+    incoming_lines = [line.split() for line in incoming_stream.split('\n')]
+    status_code = incoming_lines[0][1]
+    if 'Content-Length' in incoming_stream:
+        object_size = int(incoming_lines[7][1])
+    else:
+        object_size = -1
+
+    return "{} {} {} {} {} {}".format(host_name, method, path, version, status_code, object_size)
+
+
 class Firewall:
     TCP = 6
     UDP = 17
@@ -53,6 +73,10 @@ class Firewall:
         ips = [l for l in ips if l[0] != '%']
 
         self.geoIP = ips
+
+        # http byte stream
+        self.outgoing_stream = ""
+        self.incoming_stream = ""
 
         # TODO: Also do some initialization if needed.
 
@@ -183,7 +207,7 @@ class Firewall:
             debug(rule)
             # TODO: Do shit here to make all of the rules work :((((
             rule_tuple = tuple([t.lower() for t in rule.split()])
-
+            
             #Handle Transport Layer Rules
             if len(rule_tuple) == 4:
                 # Protocol/IP/Port rules
@@ -197,6 +221,11 @@ class Firewall:
                     transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info, pkt_dir) 
                     if transport_rules != NO_MATCH:
                         pass_pkt = transport_rules
+
+            # handle logging
+            elif len(rule_tuple) == 3 and rule_tuple[0] == "log":
+                if pkt_protocol == "tcp":
+                    self.handle_log(rule_tuple, pkt_dir, pkt_info)
 
             #Handle DNS Rules
             elif len(rule_tuple) == 3 and pkt_protocol == "dns":
@@ -445,6 +474,16 @@ class Firewall:
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
             pkt_specs['seq_num'] = struct.unpack('!L', pkt[protocol_header + 4:protocol_header + 8])[0]
+            flags = struct.unpack('!B', pkt[protocol_header + 13:protocol_header + 14])[0]
+            offset_reserve = struct.unpack('!B', pkt[protocol_header + 12:protocol_header + 13])[0]
+            # offset is number of 32-bit words in header
+            offset = (offset_reserve >> 4) * 4  # multply by 4 to convert to bytes
+
+            pkt_specs['fin'] = 0x1 & flags == 0x1
+            pkt_specs['syn'] = 0x2 & flags == 0x2
+            pkt_specs['ack'] = 0x10 & flags == 0x10
+            pkt_specs['data'] = pkt[protocol_header + offset:pkt_specs['total_len']]
+
             return "tcp"
 
         #UDP Protocol
@@ -502,6 +541,40 @@ class Firewall:
                     domain_name += "."
 
         return domain_name, qname_len + 1
+
+    def handle_log(self, rule_tuple, pkt_dir, pkt_info):
+        debug("handle_log")
+        debug("rule_tuple: " + str(rule_tuple))
+        debug("pkt_dir: " + str(pkt_dir))
+        debug("pkt_info: " + str(pkt_info))
+        if pkt_dir == PKT_DIR_OUTGOING:
+            if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
+                self.outgoing_stream = ""
+            elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                self.outgoing_stream += pkt_info['data']
+            elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
+                # done
+                pass
+            else:
+                # error
+                pass
+        else:
+            if pkt_info['syn'] == True and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                self.incoming_stream = ""
+            elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                self.incoming_stream += pkt_info['data']
+            elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
+                # done
+                # run logging stuff
+                debug("logging")
+                flog = open('http.log', 'a')
+                flog.write(get_http_log_data(self.incoming_stream, self.outgoing_stream))
+                flog.flush();
+                flog.close();
+            else:
+                # error
+                pass
+    
 
     # TODO: You can add more methods as you want.
 
