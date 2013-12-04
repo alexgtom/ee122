@@ -115,58 +115,142 @@ class Firewall:
         else:
             debug(False)
 
+"""
+=======================================================================================
+The following code deals with injecting a RST packet and a DNS response
+=======================================================================================
+"""
 
-    def make_RST_pkt(self, pkt_info):
+    def make_RST_pkt(self, pkt_info, packet):
         packet = ""
-        #Version + header length
-        version_headerlen = struct.pack('!B', 0x45)
-        #Type of service
-        tos = struct.pack('!B', pkt_info['tos'])
-        #ID
-        identification = struct.pack('!H', pkt_info['ip_id'])
-        #Fragment info (Do not fragment, fragment offset = 0)
-        fragment_info = struct.pack('!H', 0x40)
-        #TTL (default of 64)
-        ttl = struct.pack('!B', 0x40)
-        #protocol (TCP - 6)
-        protocol = struct.pack('!B', 0x06)
-        #Source address
+
+        ip_header_len = pkt_info['header_len'] * 4
+
+        #Set new ttl
+        ttl = struct.pack('!B', 64)
+        packet = packet[0:8] + ttl + packet[9:]
+
+        #Switch source and destination IP Addresses
         src_ip = struct.pack('!L', pkt_info['dst_ip'])
-        #destination address
         dst_ip = struct.pack('!L', pkt_info['src_ip'])
-        #header checksum
-        ip_checksum = self.calculate_ip_checksum()
-        #Total length
-            #DO STUFF HERE
-        #TCP source port
+        packet = packet[0:12] + src_ip + packet[16:]
+        packet = packet[0:16] + dst_ip + packet[20:]
+
+        #Swtich source and destination ports
         src_port = struct.pack('!H', pkt_info['tcp_dst'])
-        #TCP destination port
         dst_port = struct.pack('!H', pkt_info['tcp_src'])
-        #sequence number
-        seq_num = struct.pack('!L', 0x00000000)
-        #ack number
-        ack_num = struck.pack('!L', pkt_info['seq_num'])
-        #offset and reserved
-        offset_reserve = struct.pack('!B', 0x50)
-        #TCP Flag (RST = 0x04)
-        rst = struct.pack('!B', 0x04)
-        #tcp window
-        window = struct.pack('!H', 0x0000)
-        #TCP checksum
-        tcp_cehcksum = self.calculate_tcp_checksum()
-        #urgent pointer
-        urgent = struct.pack('!H', 0x0000)
+        packet = packet[0:ip_header_len] + src_port + packet[ip_header_len+2:]
+        packet = packet[0:ip_header_len + 2] + dst_port + packet[ip_header_len + 4:]
+
+        #Update sequence and ack number
+        new_seq_num = struct.pack('!L', 0x00000000)
+        old_seq_num = struct.unpack('!L', packet[ip_header_len + 4:ip_header_len + 8])
+        data_len = len(pkt_info['data'])
+        new_ack_num = struct.pack('!L', old_seq_num + data_len)
+        packet = packet[0:header_len + 4] + new_seq_num + packet[header_len + 8:]
+        packet = packet[0:header_len + 8] + new_ack_num + packet[header_len + 12:]
+
+        #Set ACK and RST flags
+        ack_flag = 0x10
+        rst_flag = 0x04
+        flags = struct.pack('!B', ack_flag + rst_flag)
+        packet = packet[0:header_len + 13] + flags + packet[header_len + 14:]
+
+        #Make sure total length is correct
+        if pkt_info['total_len'] != len(packet):
+            packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
+
+        #compute ip checksum
+        ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
+        packet = packet[0:10] + ip_checksum + packet[12:]
+
+        #compute tcp checksum
+        tcp_checksum = struct.pack('!H', self.compute_tcp_checksum(packet))
+        packet = packet[0:header_len + 16] + tcp_checksum + packet[header_len + 18:]
+
+        return packet
+
+
+    def make_dns_response(self, pkt_info, packet):
+        packet = ""
+
+        ip_header_len = pkt_info['header_len'] * 4
+
+        #Set new ttl
+        ttl = struct.pack('!B', 1)
+        packet = packet[0:8] + ttl + packet[9:]
+
+        #Switch source and destination IP Addresses
+        src_ip = struct.pack('!L', pkt_info['dst_ip'])
+        dst_ip = struct.pack('!L', pkt_info['src_ip'])
+        packet = packet[0:12] + src_ip + packet[16:]
+        packet = packet[0:16] + dst_ip + packet[20:]
+
+        #Swtich source and destination ports
+        src_port = struct.pack('!H', pkt_info['udp_dst'])
+        dst_port = struct.pack('!H', pkt_info['udp_src'])
+        packet = packet[0:ip_header_len] + src_port + packet[ip_header_len+2:]
+        packet = packet[0:ip_header_len + 2] + dst_port + packet[ip_header_len + 4:]
+
+        #Make sure total length is correct
+        if pkt_info['total_len'] != len(packet):
+            packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
+
+        #compute ip checksum
+        ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
+        packet = packet[0:10] + ip_checksum + packet[12:]
+
+        #compute tcp checksum
+        tcp_checksum = struct.pack('!H', self.compute_tcp_checksum(packet))
+        packet = packet[0:header_len + 6] + tcp_checksum + packet[header_len + 8:]
+
+        return packet
 
 
 
-    def calculate_ip_checksum(self, ):
-        pass
+    def compute_ip_checksum(self, packet):
+        header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
 
-    def calculate_tcp_checksum(self, pkt):
-        pass
+        checksum = 0
+        for i in range(0, header_len, 2):
+            checksum += ord(packet[i]) + (ord(packet[i+1]) << 8)
 
-    def make_DNS_response(self, pkt):
-        pass
+        checksum = (checksum >> 16) + (checksum & 0xFFFF)
+        checksum += (checksum >> 16)
+        return ~checksum & 0xFFFF
+
+
+    def compute_tcp_checksum(self, packet):
+        total_len = struct.unpack('!H', packet[2:4])[0]
+        header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
+        transport_len = total_len - header_len
+
+        protocol = struct.unpack('!B', packet[9:10])[0]
+
+        checksum = 0
+        for i in range(0, transport_len, 2):
+            checksum += ord(packet[header_len + i]) + (ord(packet[header_len + i+1]) << 8)
+        #If total length is odd, add a padded byte to build the final 16bit word
+        if (transport_len % 2 != 0):
+            print "Transport len: " + str(transport_len)
+            print "Padding the last byte"
+            checksum +=  ord(packet[header_len + transport_len - 1]) & socket.ntohs(0xFF00)
+
+        #add the pseudo header into the checksum
+        for i in range(12, 20):
+            checksum += ord(packet[i]) + (ord(packet[i+1]) << 8)
+
+        #add the length of the datagram and the protocol type
+        protocol = struct.unpack('!B', packet[9:10])[0]
+        packed_protocol = struct.pack('!H', protocol)
+        packed_len = struct.pack('!H', transport_len)
+        checksum += ord(packed_protocol[0]) + (ord(packed_protocol[1]) << 8)
+        checksum += ord(packed_len[0]) + (ord(packed_len[1]) << 8)
+
+        checksum = (checksum >> 16) + (checksum & 0xFFFF)
+        checksum += (checksum >> 16)
+        return ~checksum & 0xFFFF
+
 
 
     """
@@ -473,7 +557,6 @@ class Firewall:
         if protocol == 6:
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
-            pkt_specs['seq_num'] = struct.unpack('!L', pkt[protocol_header + 4:protocol_header + 8])[0]
             flags = struct.unpack('!B', pkt[protocol_header + 13:protocol_header + 14])[0]
             offset_reserve = struct.unpack('!B', pkt[protocol_header + 12:protocol_header + 13])[0]
             # offset is number of 32-bit words in header
