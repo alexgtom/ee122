@@ -247,9 +247,36 @@ class Firewall:
         checksum = (~checksum) & 0xFFFF
 
         orig_chksum = struct.unpack('!H', packet[10:12])[0]
+<<<<<<< HEAD
         debug(orig_chksum == checksum)
 
         return checksum
+=======
+        print (orig_chksum == checksum)
+
+        return checksum
+
+    '''
+    def tcp_header_checksum(pkt, ip_header_len):
+        pkt_len, = struct.unpack('!H', pkt[2:4])
+        chksum = pkt_len - ip_header_len 
+        if pkt_len % 2 != 0:
+            pkt_len += 1
+            pkt = pkt + struct.pack("!B", 0)
+        for i in range(ip_header_len, pkt_len, 2):
+            if i != (ip_header_len + 16):
+chksum += struct.unpack("!H", pkt[i: i+ 2])[0]
+chksum += struct.unpack("!H", pkt[12:14])[0] #start adder
+chksum += struct.unpack("!H", pkt[14:16])[0] #start adder
+chksum += struct.unpack("!H", pkt[16:18])[0] #dst adder
+chksum += struct.unpack("!H", pkt[18:20])[0] #dst adder
+chksum += struct.unpack("!B", pkt[9])[0] #protocol number
+while chksum >> 16 != 0:
+chksum = (chksum & 0xFFFF) + (chksum >> 16)
+chksum = (~chksum) & 0xFFFF
+return chksum
+    '''
+>>>>>>> c0910a976a7859db68d34af8562dd5668dfc2253
 
 
     def compute_transport_checksum(self, packet):
@@ -287,8 +314,14 @@ class Firewall:
         checksum = ~checksum & 0xFFFF
 
         #orig_chksum = struct.unpack('!H', packet[header_len + 16:header_len + 18])[0] #TCP
+<<<<<<< HEAD
         orig_chksum = struct.unpack('!H', packet[header_len + 6:header_len + 8])[0] #UDP
         debug(orig_chksum == checksum)
+=======
+        orig_chksum = struct.unpack('!H', packet[header_len + 6:header_len + 8])[0]
+        print (orig_chksum)
+        print (orig_chksum == checksum)
+>>>>>>> c0910a976a7859db68d34af8562dd5668dfc2253
         return checksum
 
 
