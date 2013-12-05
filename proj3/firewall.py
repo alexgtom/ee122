@@ -6,7 +6,7 @@ import struct
 import socket
 import random
 
-DEBUG = False
+DEBUG = True
 PASS = 0
 DROP = 1
 DENY = 2
@@ -101,25 +101,26 @@ class Firewall:
                 self.iface_ext.send_ip_packet(pkt)
             else:
                 self.iface_int.send_ip_packet(pkt)
-            debug(True)
+            debug("PASS")
         elif verdict == DENY:
             if protocol == "tcp":
                 #TODO: Send a TCP RST packet
-                packet = self.make_RST_pkt(pkt_info)
+                print "Deny tcp"
+                packet = self.make_RST_pkt(pkt_info, pkt)
                 self.iface_ext.send_ip_packet(packet)
             elif protocol == "dns":
                 #TODO: Send a DNS response packet
-                packet = self.make_DNS_response(pkt_info)
+                packet = self.make_DNS_response(pkt_info, pkt)
                 self.iface_int.send_ip_packet(packet)
-            debug(True)
+            debug("DENY")
         else:
-            debug(False)
+            debug("DROP")
 
-"""
-=======================================================================================
-The following code deals with injecting a RST packet and a DNS response
-=======================================================================================
-"""
+    """
+    =======================================================================================
+    The following code deals with injecting a RST packet and a DNS response
+    =======================================================================================
+    """
 
     def make_RST_pkt(self, pkt_info, packet):
         ip_header_len = pkt_info['header_len'] * 4
@@ -129,8 +130,8 @@ The following code deals with injecting a RST packet and a DNS response
         packet = packet[0:8] + ttl + packet[9:]
 
         #Switch source and destination IP Addresses
-        src_ip = struct.pack('!L', pkt_info['dst_ip'])
-        dst_ip = struct.pack('!L', pkt_info['src_ip'])
+        src_ip = pkt_info['dst_ip']
+        dst_ip = pkt_info['src_ip']
         packet = packet[0:12] + src_ip + packet[16:]
         packet = packet[0:16] + dst_ip + packet[20:]
 
@@ -142,31 +143,29 @@ The following code deals with injecting a RST packet and a DNS response
 
         #Update sequence and ack number
         new_seq_num = struct.pack('!L', 0x00000000)
-        old_seq_num = struct.unpack('!L', packet[ip_header_len + 4:ip_header_len + 8])
+        old_seq_num = struct.unpack('!L', packet[ip_header_len + 4:ip_header_len + 8])[0]
         data_len = len(pkt_info['data'])
         new_ack_num = struct.pack('!L', old_seq_num + data_len)
-        packet = packet[0:header_len + 4] + new_seq_num + packet[header_len + 8:]
-        packet = packet[0:header_len + 8] + new_ack_num + packet[header_len + 12:]
+        packet = packet[0:ip_header_len + 4] + new_seq_num + packet[ip_header_len + 8:]
+        packet = packet[0:ip_header_len + 8] + new_ack_num + packet[ip_header_len + 12:]
 
         #Set ACK and RST flags
         ack_flag = 0x10
         rst_flag = 0x04
         flags = struct.pack('!B', ack_flag + rst_flag)
-        packet = packet[0:header_len + 13] + flags + packet[header_len + 14:]
+        packet = packet[0:ip_header_len + 13] + flags + packet[ip_header_len + 14:]
 
         #Make sure total length is correct
         if pkt_info['total_len'] != len(packet):
             packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
 
         #compute ip checksum
-        packet = packet[0:10] + struct.pack('!H', 0) + packet[12:]
-        ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
+        ip_checksum = struct.pack('!H', checksum)
         packet = packet[0:10] + ip_checksum + packet[12:]
 
         #compute tcp checksum
-        packet = packet[0:header_len + 16] + struct.pack('!H', 0) + packet[header_len + 18:]
-        tcp_checksum = struct.pack('!H', self.compute_tcp_checksum(packet))
-        packet = packet[0:header_len + 16] + tcp_checksum + packet[header_len + 18:]
+        tcp_checksum = struct.pack('!H', self.compute_transport_checksum(packet))
+        packet = packet[0:ip_header_len + 16] + tcp_checksum + packet[ip_header_len + 18:]
 
         return packet
 
@@ -224,61 +223,73 @@ The following code deals with injecting a RST packet and a DNS response
         packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
 
         #compute ip checksum
-        packet = packet[0:10] + struct.pack('!H', 0) + packet[12:]
         ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
         packet = packet[0:10] + ip_checksum + packet[12:]
 
         #compute udp checksum
-        packet = packet[0:header_len + 6] + struct.pack('!H', 0) + packet[header_len + 8:]
         tcp_checksum = struct.pack('!H', self.compute_transport_checksum(packet))
         packet = packet[0:header_len + 6] + tcp_checksum + packet[header_len + 8:]
 
         return packet
 
 
-
     def compute_ip_checksum(self, packet):
-        header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
-
+        nleft = header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
         checksum = 0
-        for i in range(0, header_len, 2):
-            checksum += ord(packet[i]) + (ord(packet[i+1]) << 8)
+
+        while nleft > 1:
+            if nleft != 12: 
+                checksum += struct.unpack('!H', packet[nleft - 2:nleft])[0]
+            nleft -= 2
 
         checksum = (checksum >> 16) + (checksum & 0xFFFF)
         checksum += (checksum >> 16)
-        return ~checksum & 0xFFFF
+        checksum = (~checksum) & 0xFFFF
+
+        orig_chksum = struct.unpack('!H', packet[10:12])[0]
+        debug(orig_chksum == checksum)
+
+        return checksum
 
 
     def compute_transport_checksum(self, packet):
         total_len = struct.unpack('!H', packet[2:4])[0]
         header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
-        transport_len = total_len - header_len
-
         protocol = struct.unpack('!B', packet[9:10])[0]
+
+        if total_len % 2 != 0:
+            new_len = total_len + 1
+            packet += struct.pack('!B', 0)
+        else:
+            new_len = total_len
 
         checksum = 0
-        for i in range(0, transport_len, 2):
-            checksum += ord(packet[header_len + i]) + (ord(packet[header_len + i+1]) << 8)
-        #If total length is odd, add a padded byte to build the final 16bit word
-        if (transport_len % 2 != 0):
-            print "Transport len: " + str(transport_len)
-            print "Padding the last byte"
-            checksum +=  ord(packet[header_len + transport_len - 1]) & socket.ntohs(0xFF00)
+        if (protocol == 6): #TCP
+            for i in range(header_len, new_len, 2):
+                if i != (header_len + 16):
+                    checksum += struct.unpack("!H", packet[i: i+ 2])[0]
+        elif (protocol == 17): #UDP
+            print "handling udp checksum"
+            for i in range(header_len, new_len, 2):
+                if i != (header_len + 6):
+                    checksum += struct.unpack("!H", packet[i: i+ 2])[0]
 
-        #add the pseudo header into the checksum
-        for i in range(12, 20):
-            checksum += ord(packet[i]) + (ord(packet[i+1]) << 8)
+        checksum += struct.unpack("!H", packet[12:14])[0] #src address
+        checksum += struct.unpack("!H", packet[14:16])[0] #src address
+        checksum += struct.unpack("!H", packet[16:18])[0] #dst address
+        checksum += struct.unpack("!H", packet[18:20])[0] #dst address
 
-        #add the length of the datagram and the protocol type
-        protocol = struct.unpack('!B', packet[9:10])[0]
-        packed_protocol = struct.pack('!H', protocol)
-        packed_len = struct.pack('!H', transport_len)
-        checksum += ord(packed_protocol[0]) + (ord(packed_protocol[1]) << 8)
-        checksum += ord(packed_len[0]) + (ord(packed_len[1]) << 8)
+        checksum += protocol #protocol number
+        checksum += total_len - header_len #length
 
         checksum = (checksum >> 16) + (checksum & 0xFFFF)
         checksum += (checksum >> 16)
-        return ~checksum & 0xFFFF
+        checksum = ~checksum & 0xFFFF
+
+        #orig_chksum = struct.unpack('!H', packet[header_len + 16:header_len + 18])[0] #TCP
+        orig_chksum = struct.unpack('!H', packet[header_len + 6:header_len + 8])[0] #UDP
+        debug(orig_chksum == checksum)
+        return checksum
 
 
 
@@ -346,9 +357,12 @@ The following code deals with injecting a RST packet and a DNS response
                 if pkt_info['valid_dns'] == True:
                     verdict, dns, domain_name = rule_tuple
                     dns_rules = self.process_dns_rules(verdict, domain_name, pkt_info['dns_qname'])
+                    debug("DNS rules: " + str(dns_rules))
                     if dns_rules != NO_MATCH:
+                        debug("Pass pkt: " + str(pass_pkt))
                         pass_pkt = dns_rules
                 else:
+                    print "invalid dns"
                     return DROP, pkt_info
         return pass_pkt, pkt_info
 
@@ -493,6 +507,7 @@ The following code deals with injecting a RST packet and a DNS response
 
     def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
         if self.regex_interpreter(domain_name, pkt_domain_name) != None:
+            debug("Domain name matches")
             if verdict == "pass":
                 return PASS
             elif verdict == "drop":
@@ -500,6 +515,7 @@ The following code deals with injecting a RST packet and a DNS response
             else:
                 return DENY
         else:
+            debug("no domain names match")
             # no dns rules match
             return NO_MATCH
 
@@ -513,7 +529,7 @@ The following code deals with injecting a RST packet and a DNS response
         elif '*' in domain_name:
             #Make sure regex is well formed
             if '*' != domain_name[0]:
-                return False
+                return None
             else:
                 if domain_name[1:len(domain_name)] in pkt_domain_name:
                     return True
@@ -545,10 +561,14 @@ The following code deals with injecting a RST packet and a DNS response
         pkt_specs['version'] = version_and_length >> 4
         pkt_specs['header_len'] = version_and_length & 0b00001111
 
+        debug("New ip checksum: " + str(self.compute_ip_checksum(pkt)))
+
         pkt_specs['tos'] = struct.unpack('!B', pkt[1:2])[0]
 
         #Find the total length of the packet
         pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])[0]
+
+        pkt_specs['ip_checksum'] = struct.unpack('!H', pkt[10:12])[0]
 
         if self.validate_ip(pkt_specs['header_len'], pkt_specs['total_len'], pkt):
             #IP header is valid
@@ -584,6 +604,7 @@ The following code deals with injecting a RST packet and a DNS response
 
         #TCP Protocol
         if protocol == 6:
+            debug("New tcp checksum: " + str(self.compute_transport_checksum(pkt)))
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
             flags = struct.unpack('!B', pkt[protocol_header + 13:protocol_header + 14])[0]
@@ -613,13 +634,16 @@ The following code deals with injecting a RST packet and a DNS response
                         #invalidate the packet
                         pkt_specs['valid_dns'] = False
                     else:
+
+                        debug("New udp checksum: " + str(self.compute_transport_checksum(pkt)))
                         pkt_specs['valid_dns'] = True
                         dns_questions = dns_header + 12
                         pkt_specs['dns_qname'], pkt_specs['qname_len'] = self.find_qname(pkt, dns_questions)
-                        DNS_qtype_location = dns_questions + qname_len
+                        DNS_qtype_location = dns_questions + pkt_specs['qname_len']
                         pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
                         pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
                 except Exception:
+                    print 'throwing an exception'
                     pkt_specs['valid_dns'] = False
                 return "dns"
 
