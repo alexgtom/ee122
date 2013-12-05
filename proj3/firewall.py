@@ -122,8 +122,6 @@ The following code deals with injecting a RST packet and a DNS response
 """
 
     def make_RST_pkt(self, pkt_info, packet):
-        packet = ""
-
         ip_header_len = pkt_info['header_len'] * 4
 
         #Set new ttl
@@ -161,10 +159,12 @@ The following code deals with injecting a RST packet and a DNS response
             packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
 
         #compute ip checksum
+        packet = packet[0:10] + struct.pack('!H', 0) + packet[12:]
         ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
         packet = packet[0:10] + ip_checksum + packet[12:]
 
         #compute tcp checksum
+        packet = packet[0:header_len + 16] + struct.pack('!H', 0) + packet[header_len + 18:]
         tcp_checksum = struct.pack('!H', self.compute_tcp_checksum(packet))
         packet = packet[0:header_len + 16] + tcp_checksum + packet[header_len + 18:]
 
@@ -172,9 +172,8 @@ The following code deals with injecting a RST packet and a DNS response
 
 
     def make_dns_response(self, pkt_info, packet):
-        packet = ""
-
         ip_header_len = pkt_info['header_len'] * 4
+        dns_header = ip_header_len + 8
 
         #Set new ttl
         ttl = struct.pack('!B', 1)
@@ -192,16 +191,46 @@ The following code deals with injecting a RST packet and a DNS response
         packet = packet[0:ip_header_len] + src_port + packet[ip_header_len+2:]
         packet = packet[0:ip_header_len + 2] + dst_port + packet[ip_header_len + 4:]
 
+        #set qr to 1 for a response
+        options = struct.unpack('!H', packet[dns_header + 2:dns_header + 4])[0]
+        qr = 0b1
+        options = options | qr
+        packet = packet[0:dns_header + 2] + struct.pack('!H', options) + packet[dns_header + 4:]
+
+        #Update ancount to be 1
+        packet = packet[0:dns_header + 6] + struct.pack('!B', 1) + packet[dns_header + 8:]
+
+        #Make sure QTYPE = A(1) and QCLASS = internet(1)
+        qtype_location = dns_header + 12 + pkt_info['qname_len']
+        if (pkt_info['dns_qtype'] != 1):
+            packet = packet[0:qtype_location] + struct.pack('!H', 1) + packet[qtype_location + 2:]
+        if (pkt_info['dns_qclass'] != 1):
+            packet = packet[0:qtype_location + 2] + struct.pack('!H', 1) + packet[qtype_location + 4:]
+
+        #Clear all contents after DNS Questions if any
+        packet = packet[0:qtype_location + 4]
+
+        #copy over qname, qtype, and qclass to DNS Answers section and add appropriate fields
+        packet += packet[dns_header + 12:]
+        packet += struct.pack('!L', 1) #ttl
+        packet += struct.pack('!H', 4) #RDLENGTH
+        packet += struct.pack('!L', socket.inet_aton('169.229.49.109'))
+
+        #calculate correct UDP length
+        udp_len = len(packet) - ip_header_len
+        packet = packet[0:ip_header_len + 4] + struct.pack('!H', udp_len) + packet[ip_header_len + 6:]
+
         #Make sure total length is correct
-        if pkt_info['total_len'] != len(packet):
-            packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
+        packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
 
         #compute ip checksum
+        packet = packet[0:10] + struct.pack('!H', 0) + packet[12:]
         ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
         packet = packet[0:10] + ip_checksum + packet[12:]
 
-        #compute tcp checksum
-        tcp_checksum = struct.pack('!H', self.compute_tcp_checksum(packet))
+        #compute udp checksum
+        packet = packet[0:header_len + 6] + struct.pack('!H', 0) + packet[header_len + 8:]
+        tcp_checksum = struct.pack('!H', self.compute_transport_checksum(packet))
         packet = packet[0:header_len + 6] + tcp_checksum + packet[header_len + 8:]
 
         return packet
@@ -220,7 +249,7 @@ The following code deals with injecting a RST packet and a DNS response
         return ~checksum & 0xFFFF
 
 
-    def compute_tcp_checksum(self, packet):
+    def compute_transport_checksum(self, packet):
         total_len = struct.unpack('!H', packet[2:4])[0]
         header_len = (struct.unpack('!B', packet[0:1])[0] & 0x0F) * 4
         transport_len = total_len - header_len
@@ -586,7 +615,7 @@ The following code deals with injecting a RST packet and a DNS response
                     else:
                         pkt_specs['valid_dns'] = True
                         dns_questions = dns_header + 12
-                        pkt_specs['dns_qname'], qname_len = self.find_qname(pkt, dns_questions)
+                        pkt_specs['dns_qname'], pkt_specs['qname_len'] = self.find_qname(pkt, dns_questions)
                         DNS_qtype_location = dns_questions + qname_len
                         pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
                         pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
