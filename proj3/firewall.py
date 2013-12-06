@@ -105,14 +105,14 @@ class Firewall:
         elif verdict == DENY:
             if protocol == "tcp":
                 #TODO: Send a TCP RST packet
-                print "Deny tcp"
                 packet = self.make_RST_pkt(pkt_info, pkt)
                 self.iface_ext.send_ip_packet(packet)
+                debug("DENY TCP")
             elif protocol == "dns":
                 #TODO: Send a DNS response packet
-                packet = self.make_DNS_response(pkt_info, pkt)
+                packet = self.make_dns_response(pkt_info, pkt)
                 self.iface_int.send_ip_packet(packet)
-            debug("DENY")
+                debug("DENY DNS")
         else:
             debug("DROP")
 
@@ -123,6 +123,8 @@ class Firewall:
     """
 
     def make_RST_pkt(self, pkt_info, packet):
+        debug("old packet:")
+        debug(pkt_info)
         ip_header_len = pkt_info['header_len'] * 4
 
         #Set new ttl
@@ -132,8 +134,8 @@ class Firewall:
         #Switch source and destination IP Addresses
         src_ip = pkt_info['dst_ip']
         dst_ip = pkt_info['src_ip']
-        packet = packet[0:12] + src_ip + packet[16:]
-        packet = packet[0:16] + dst_ip + packet[20:]
+        packet = packet[0:12] + socket.inet_aton(src_ip) + packet[16:]
+        packet = packet[0:16] + socket.inet_aton(dst_ip) + packet[20:]
 
         #Swtich source and destination ports
         src_port = struct.pack('!H', pkt_info['tcp_dst'])
@@ -144,8 +146,7 @@ class Firewall:
         #Update sequence and ack number
         new_seq_num = struct.pack('!L', 0x00000000)
         old_seq_num = struct.unpack('!L', packet[ip_header_len + 4:ip_header_len + 8])[0]
-        data_len = len(pkt_info['data'])
-        new_ack_num = struct.pack('!L', old_seq_num + data_len)
+        new_ack_num = struct.pack('!L', old_seq_num + 1)
         packet = packet[0:ip_header_len + 4] + new_seq_num + packet[ip_header_len + 8:]
         packet = packet[0:ip_header_len + 8] + new_ack_num + packet[ip_header_len + 12:]
 
@@ -160,12 +161,29 @@ class Firewall:
             packet = packet[0:2] + struct.pack('!H', len(packet)) + packet[4:]
 
         #compute ip checksum
-        ip_checksum = struct.pack('!H', checksum)
+        ip_checksum = struct.pack('!H', self.compute_ip_checksum(packet))
         packet = packet[0:10] + ip_checksum + packet[12:]
 
         #compute tcp checksum
         tcp_checksum = struct.pack('!H', self.compute_transport_checksum(packet))
         packet = packet[0:ip_header_len + 16] + tcp_checksum + packet[ip_header_len + 18:]
+
+        if DEBUG == True:
+            debug("new packet:")
+            packet_specs = {}
+            version_and_length = struct.unpack('!B', packet[0:1])[0]
+            packet_specs['version'] = version_and_length >> 4
+            packet_specs['header_len'] = version_and_length & 0b00001111
+            packet_specs['total_len'] = struct.unpack('!H', packet[2:4])[0]
+            packet_specs['ip_checksum'] = struct.unpack('!H', packet[10:12])[0]
+            packet_specs['src_ip'] = socket.inet_ntoa(packet[12:16])
+            packet_specs['dst_ip'] = socket.inet_ntoa(packet[16:20])
+            protocol_byte = struct.unpack('!B', packet[9:10])[0]
+            packet_specs['ip_id'] = struct.unpack('!H', packet[4:6])[0]
+            protocol_header = packet_specs['header_len'] * 4
+            packet_specs['tcp_src'] = struct.unpack('!H', packet[protocol_header:protocol_header + 2])[0]
+            packet_specs['tcp_dst'] = struct.unpack('!H', packet[protocol_header + 2:protocol_header + 4])[0]
+            debug(packet_specs)
 
         return packet
 
@@ -174,15 +192,18 @@ class Firewall:
         ip_header_len = pkt_info['header_len'] * 4
         dns_header = ip_header_len + 8
 
+        debug("old packet")
+        debug(pkt_info)
+
         #Set new ttl
-        ttl = struct.pack('!B', 1)
+        ttl = struct.pack('!B', 64)
         packet = packet[0:8] + ttl + packet[9:]
 
         #Switch source and destination IP Addresses
-        src_ip = struct.pack('!L', pkt_info['dst_ip'])
-        dst_ip = struct.pack('!L', pkt_info['src_ip'])
-        packet = packet[0:12] + src_ip + packet[16:]
-        packet = packet[0:16] + dst_ip + packet[20:]
+        src_ip = pkt_info['dst_ip']
+        dst_ip = pkt_info['src_ip']
+        packet = packet[0:12] + socket.inet_aton(src_ip) + packet[16:]
+        packet = packet[0:16] + socket.inet_aton(dst_ip) + packet[20:]
 
         #Swtich source and destination ports
         src_port = struct.pack('!H', pkt_info['udp_dst'])
@@ -192,19 +213,20 @@ class Firewall:
 
         #set qr to 1 for a response
         options = struct.unpack('!H', packet[dns_header + 2:dns_header + 4])[0]
-        qr = 0b1
+        qr = 0b1 << 15
         options = options | qr
         packet = packet[0:dns_header + 2] + struct.pack('!H', options) + packet[dns_header + 4:]
 
         #Update ancount to be 1
-        packet = packet[0:dns_header + 6] + struct.pack('!B', 1) + packet[dns_header + 8:]
+        packet = packet[0:dns_header + 6] + struct.pack('!H', 1) + packet[dns_header + 8:]
+
+        #print(pkt_info['dns_qname'])
+        #packet = packet[0:dns_header + 12] + pkt_info['dns_qname'] + packet[dns_header + 12 + pkt_info['qname_len']:]
 
         #Make sure QTYPE = A(1) and QCLASS = internet(1)
         qtype_location = dns_header + 12 + pkt_info['qname_len']
-        if (pkt_info['dns_qtype'] != 1):
-            packet = packet[0:qtype_location] + struct.pack('!H', 1) + packet[qtype_location + 2:]
-        if (pkt_info['dns_qclass'] != 1):
-            packet = packet[0:qtype_location + 2] + struct.pack('!H', 1) + packet[qtype_location + 4:]
+        packet = packet[0:qtype_location] + struct.pack('!H', 1) + packet[qtype_location + 2:]
+        packet = packet[0:qtype_location + 2] + struct.pack('!H', 1) + packet[qtype_location + 4:]
 
         #Clear all contents after DNS Questions if any
         packet = packet[0:qtype_location + 4]
@@ -213,7 +235,7 @@ class Firewall:
         packet += packet[dns_header + 12:]
         packet += struct.pack('!L', 1) #ttl
         packet += struct.pack('!H', 4) #RDLENGTH
-        packet += struct.pack('!L', socket.inet_aton('169.229.49.109'))
+        packet += socket.inet_aton('169.229.49.109')
 
         #calculate correct UDP length
         udp_len = len(packet) - ip_header_len
@@ -228,7 +250,26 @@ class Firewall:
 
         #compute udp checksum
         tcp_checksum = struct.pack('!H', self.compute_transport_checksum(packet))
-        packet = packet[0:header_len + 6] + tcp_checksum + packet[header_len + 8:]
+        packet = packet[0:ip_header_len + 6] + tcp_checksum + packet[ip_header_len + 8:]
+
+        if DEBUG == True:
+            debug("new packet:")
+            packet_specs = {}
+            version_and_length = struct.unpack('!B', packet[0:1])[0]
+            packet_specs['version'] = version_and_length >> 4
+            packet_specs['header_len'] = version_and_length & 0b00001111
+            packet_specs['total_len'] = struct.unpack('!H', packet[2:4])[0]
+            packet_specs['ip_checksum'] = struct.unpack('!H', packet[10:12])[0]
+            packet_specs['src_ip'] = socket.inet_ntoa(packet[12:16])
+            packet_specs['dst_ip'] = socket.inet_ntoa(packet[16:20])
+            protocol_byte = struct.unpack('!B', packet[9:10])[0]
+            packet_specs['ip_id'] = struct.unpack('!H', packet[4:6])[0]
+            packet_specs['dns_qname'] = packet[dns_header + 12: dns_header + 12 + pkt_info['qname_len']]
+            packet_specs['udp_src'] = struct.unpack('!H', packet[ip_header_len:ip_header_len + 2])[0]
+            packet_specs['udp_dst'] = struct.unpack('!H', packet[ip_header_len + 2:ip_header_len + 4])[0]
+            packet_specs['dns_qtype'] = struct.unpack('!H', packet[qtype_location:qtype_location + 2])[0]
+            packet_specs['dns_qclass'] = struct.unpack('!H', packet[qtype_location + 2:qtype_location + 4])[0]
+            debug(packet_specs)
 
         return packet
 
@@ -247,7 +288,7 @@ class Firewall:
         checksum = (~checksum) & 0xFFFF
 
         orig_chksum = struct.unpack('!H', packet[10:12])[0]
-        print (orig_chksum == checksum)
+        debug("Old and new ip checksum match: " + str(orig_chksum == checksum))
 
         return checksum
 
@@ -265,11 +306,14 @@ class Firewall:
 
         checksum = 0
         if (protocol == 6): #TCP
+            prot = "tcp"
+            orig_chksum = struct.unpack('!H', packet[header_len + 16:header_len + 18])[0] #TCP
             for i in range(header_len, new_len, 2):
                 if i != (header_len + 16):
                     checksum += struct.unpack("!H", packet[i: i+ 2])[0]
         elif (protocol == 17): #UDP
-            print "handling udp checksum"
+            prot = "udp"
+            orig_chksum = struct.unpack('!H', packet[header_len + 6:header_len + 8])[0] #UDP
             for i in range(header_len, new_len, 2):
                 if i != (header_len + 6):
                     checksum += struct.unpack("!H", packet[i: i+ 2])[0]
@@ -286,9 +330,7 @@ class Firewall:
         checksum += (checksum >> 16)
         checksum = ~checksum & 0xFFFF
 
-        #orig_chksum = struct.unpack('!H', packet[header_len + 16:header_len + 18])[0] #TCP
-        orig_chksum = struct.unpack('!H', packet[header_len + 6:header_len + 8])[0] #UDP
-        debug(orig_chksum == checksum)
+        debug("Old and new " + str(prot) + " checksum match: " + str(orig_chksum == checksum))
         return checksum
 
 
@@ -328,7 +370,7 @@ class Firewall:
 
         #Handle all of the rules
         for rule in self.rules:
-            debug(rule)
+            #debug(rule)
             # TODO: Do shit here to make all of the rules work :((((
             rule_tuple = tuple([t.lower() for t in rule.split()])
             
@@ -336,6 +378,8 @@ class Firewall:
             if len(rule_tuple) == 4:
                 # Protocol/IP/Port rules
                 verdict, protocol, ext_ip_address, ext_port = rule_tuple
+                if verdict == "deny":
+                    debug(rule)
 
                 #If the protocol of the rule doesn't match current protocol, go to the next rule
                 if protocol != pkt_protocol:
@@ -344,6 +388,7 @@ class Firewall:
                     # Process all Transport layer rules
                     transport_rules = self.process_transport_rules(verdict, protocol, ext_ip_address, ext_port, pkt_info, pkt_dir) 
                     if transport_rules != NO_MATCH:
+                        debug("Pass pkt: " + str(transport_rules))
                         pass_pkt = transport_rules
 
             # handle logging
@@ -356,10 +401,11 @@ class Firewall:
                 #Only consider well formed DNS requests
                 if pkt_info['valid_dns'] == True:
                     verdict, dns, domain_name = rule_tuple
+                    debug("DNS verdict is: " + str(verdict))
                     dns_rules = self.process_dns_rules(verdict, domain_name, pkt_info['dns_qname'])
                     debug("DNS rules: " + str(dns_rules))
                     if dns_rules != NO_MATCH:
-                        debug("Pass pkt: " + str(pass_pkt))
+                        debug("Pass pkt: " + str(dns_rules))
                         pass_pkt = dns_rules
                 else:
                     print "invalid dns"
@@ -561,13 +607,14 @@ class Firewall:
         pkt_specs['version'] = version_and_length >> 4
         pkt_specs['header_len'] = version_and_length & 0b00001111
 
-        debug("New ip checksum: " + str(self.compute_ip_checksum(pkt)))
+        if DEBUG == True:
+            self.compute_ip_checksum(pkt)
 
         pkt_specs['tos'] = struct.unpack('!B', pkt[1:2])[0]
 
         #Find the total length of the packet
         pkt_specs['total_len'] = struct.unpack('!H', pkt[2:4])[0]
-
+        pkt_specs['ttl'] = struct.unpack('!B', pkt[8:9])[0]
         pkt_specs['ip_checksum'] = struct.unpack('!H', pkt[10:12])[0]
 
         if self.validate_ip(pkt_specs['header_len'], pkt_specs['total_len'], pkt):
@@ -604,7 +651,8 @@ class Firewall:
 
         #TCP Protocol
         if protocol == 6:
-            debug("New tcp checksum: " + str(self.compute_transport_checksum(pkt)))
+            if DEBUG == True:
+                self.compute_transport_checksum(pkt)
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
             flags = struct.unpack('!B', pkt[protocol_header + 13:protocol_header + 14])[0]
@@ -634,7 +682,8 @@ class Firewall:
                         #invalidate the packet
                         pkt_specs['valid_dns'] = False
                     else:
-                        debug("New udp checksum: " + str(self.compute_transport_checksum(pkt)))
+                        if DEBUG == True:
+                            self.compute_transport_checksum(pkt)
                         pkt_specs['valid_dns'] = True
                         dns_questions = dns_header + 12
                         pkt_specs['dns_qname'], pkt_specs['qname_len'] = self.find_qname(pkt, dns_questions)
@@ -659,6 +708,7 @@ class Firewall:
 
         for byte in dns_questions_payload:
             curr = struct.unpack('!B', byte)[0]
+            debug(curr)
             #Reached the end of the domain name
             if curr == 0:
                 break
@@ -674,6 +724,7 @@ class Firewall:
                 #Add in period between groups of labels
                 if len(domain_name) > 0:
                     domain_name += "."
+            debug(domain_name)
 
         return domain_name, qname_len + 1
 
