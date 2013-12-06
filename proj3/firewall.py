@@ -5,6 +5,7 @@ from main import PKT_DIR_INCOMING, PKT_DIR_OUTGOING
 import struct
 import socket
 import random
+import re
 
 DEBUG = True
 PASS = 0
@@ -25,7 +26,7 @@ def get_http_log_data(incoming_stream, outgoing_stream):
     Returns the string to write to log file
     """
     outgoing_lines = [line.split() for line in outgoing_stream.split('\n')]
-    host_name = outgoing_lines[1][1]
+    host_name = re.search(r"Host: (.*)", outgoing_stream).group(1)
     method = outgoing_lines[0][0]
     path = outgoing_lines[0][1]
     version = outgoing_lines[0][2]
@@ -33,7 +34,7 @@ def get_http_log_data(incoming_stream, outgoing_stream):
     incoming_lines = [line.split() for line in incoming_stream.split('\n')]
     status_code = incoming_lines[0][1]
     if 'Content-Length' in incoming_stream:
-        object_size = int(incoming_lines[7][1])
+        object_size = int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
     else:
         object_size = -1
 
