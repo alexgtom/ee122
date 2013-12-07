@@ -394,8 +394,11 @@ class Firewall:
 
             # handle logging
             elif len(rule_tuple) == 3 and rule_tuple[0] == "log":
-                if pkt_protocol == "tcp":
-                    self.handle_log(rule_tuple, pkt_dir, pkt_info)
+                log, http, domain_name = rule_tuple
+
+                # write to log if tcp_src == 80 or tcp_dst == 80
+                if pkt_protocol == "tcp" and (pkt_info['tcp_src'] == 80 or pkt_info['tcp_dst'] == 80):
+                    self.handle_log(rule_tuple, pkt_dir, pkt_info, domain_name)
 
             #Handle DNS Rules
             elif len(rule_tuple) == 3 and pkt_protocol == "dns":
@@ -729,7 +732,7 @@ class Firewall:
 
         return domain_name, qname_len + 1
 
-    def handle_log(self, rule_tuple, pkt_dir, pkt_info):
+    def handle_log(self, rule_tuple, pkt_dir, pkt_info, domain_name):
         debug("handle_log")
         debug("rule_tuple: " + str(rule_tuple))
         debug("pkt_dir: " + str(pkt_dir))
@@ -754,10 +757,14 @@ class Firewall:
                 # done
                 # run logging stuff
                 debug("logging")
-                flog = open('http.log', 'a')
-                flog.write(get_http_log_data(self.incoming_stream, self.outgoing_stream))
-                flog.flush();
-                flog.close();
+                log_line = get_http_log_data(self.incoming_stream, self.outgoing_stream)
+                
+                # check to make sure we only log the domain specified in the rules
+                if self.regex_interpreter(domain_name, log_line.split()[0]) != None:
+                    flog = open('http.log', 'a')
+                    flog.write(log_line)
+                    flog.flush();
+                    flog.close();
             else:
                 # error
                 pass
