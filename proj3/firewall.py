@@ -33,13 +33,13 @@ def http_log_line(incoming_stream, outgoing_stream):
     Returns the string to write to log file
     """
     outgoing_lines = [line.split() for line in outgoing_stream.split('\n')]
-    host_name = re.search(r"Host: (.*)", outgoing_stream, re.IGNORECASE).group(1)
-    method = outgoing_lines[0][0]
-    path = outgoing_lines[0][1]
-    version = outgoing_lines[0][2]
+    host_name = re.search(r"Host: (.*)", outgoing_stream, re.IGNORECASE).group(1).strip()
+    method = outgoing_lines[0][0].strip()
+    path = outgoing_lines[0][1].strip()
+    version = outgoing_lines[0][2].strip()
 
     incoming_lines = [line.split() for line in incoming_stream.split('\n')]
-    status_code = incoming_lines[0][1]
+    status_code = incoming_lines[0][1].strip()
     content_length = get_content_length(incoming_stream)
 
     return "{} {} {} {} {} {}".format(host_name, method, path, version, status_code, content_length)
