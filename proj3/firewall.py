@@ -7,21 +7,28 @@ import socket
 import random
 import re
 
-DEBUG = True
+DEBUG = False
+DEBUG_HTTP = False
 PASS = 0
 DROP = 1
 DENY = 2
 NO_MATCH = 3
 
+HEADER_DIVIDER = "\r\n\r\n"
+
 def debug(s):
     if DEBUG == True:
+        print s
+
+def debug_http(s):
+    if DEBUG_HTTP == True:
         print s
 
 # TODO: Feel free to import any Python standard moduless as necessary.
 # (http://docs.python.org/2/library/)
 # You must NOT use any 3rd-party libraries, though.
 
-def get_http_log_data(incoming_stream, outgoing_stream):
+def http_log_line(incoming_stream, outgoing_stream):
     """
     Returns the string to write to log file
     """
@@ -33,12 +40,63 @@ def get_http_log_data(incoming_stream, outgoing_stream):
 
     incoming_lines = [line.split() for line in incoming_stream.split('\n')]
     status_code = incoming_lines[0][1]
-    if 'Content-Length' in incoming_stream:
-        object_size = int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
-    else:
-        object_size = -1
+    content_length = get_content_length(incoming_stream)
 
-    return "{} {} {} {} {} {}".format(host_name, method, path, version, status_code, object_size)
+    return "{} {} {} {} {} {}".format(host_name, method, path, version, status_code, content_length)
+
+def get_content_length(incoming_stream):
+    if 'Content-Length' in incoming_stream:
+        return int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
+    else:
+        return -1
+
+def get_header_tokens(data):
+    # this method will output tokens in format [header, header, header], the data is discarded
+
+    # tokens are in format [header, dataheader, dataheader, ... , data]
+    tokens = data.split(HEADER_DIVIDER)
+    debug_http("***TOKENS " + str(tokens))
+    fixed_tokens = []
+    
+    # append the first header
+    prev_header = tokens.pop(0)
+    fixed_tokens.append(prev_header)
+
+    # len(tokens) - 1 because the last token is data
+    for i in xrange(len(tokens)-1):
+        dataheader = tokens.pop(0)
+        content_length = get_content_length(prev_header)
+        if content_length < 0:
+            continue
+        header = dataheader[content_length:]
+        fixed_tokens.append(header)
+        prev_header = header
+
+    return fixed_tokens
+
+
+def get_http_log_data(incoming_stream, outgoing_stream):
+    debug_http("*** BEGIN INCOMING_STREAM ***\n" + incoming_stream + "\n*** END INCOMING STREAM ***")
+    debug_http("*** BEGIN OUTGOING_STREAM ***\n" + outgoing_stream + "\n*** END OUTGOING STREAM ***")
+    if not is_persistent_connection(outgoing_stream):
+        return [http_log_line(incoming_stream, outgoing_stream)]
+    
+    # tokens are in format [header, data, header, data, ...]
+    incoming_tokens = get_header_tokens(incoming_stream)
+    outgoing_tokens = get_header_tokens(outgoing_stream)
+    
+    assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
+        "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
+
+    return [http_log_line(incoming_tokens[i], outgoing_tokens[i]) for i in xrange(len(incoming_tokens))]
+
+def is_persistent_connection(data):
+    """ returns a boolean of whether or not the connection is persistent """
+    return re.search('Connection: Keep-Alive', data) != None
+
+def has_complete_header(data):
+    """ tries to find a blank line, if there is one then we have the whole header """
+    return len(filter(lambda line: len(line.strip()) == 0, data.split('\n'))) > 0
 
 
 class Firewall:
@@ -78,6 +136,7 @@ class Firewall:
         # http byte stream
         self.outgoing_stream = ""
         self.incoming_stream = ""
+        self.has_received_fin_ack = False
 
         # TODO: Also do some initialization if needed.
 
@@ -733,15 +792,31 @@ class Firewall:
         return domain_name, qname_len + 1
 
     def handle_log(self, rule_tuple, pkt_dir, pkt_info, domain_name):
-        debug("handle_log")
-        debug("rule_tuple: " + str(rule_tuple))
-        debug("pkt_dir: " + str(pkt_dir))
-        debug("pkt_info: " + str(pkt_info))
+        debug_http("handle_log")
+        debug_http("rule_tuple: " + str(rule_tuple))
+        debug_http("pkt_dir: " + str(pkt_dir))
+        debug_http("pkt_info: " + str(pkt_info))
         if pkt_dir == PKT_DIR_OUTGOING:
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
                 self.outgoing_stream = ""
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
-                self.outgoing_stream += pkt_info['data']
+                if self.has_received_fin_ack == True:
+                    # close the connection if we recieved a fin ack
+                    # run logging stuff
+                    debug_http("### BEGIN LOGGING ###")
+                    log_lines = get_http_log_data(self.incoming_stream, self.outgoing_stream)
+                    
+                    for log_line in log_lines:
+                        # check to make sure we only log the domain specified in the rules
+                        if self.regex_interpreter(domain_name, log_line.split()[0]) != None:
+                            flog = open('http.log', 'a')
+                            flog.write(log_line)
+                            flog.flush();
+                            flog.close();
+                    self.has_received_fin_ack = False
+                    debug_http("### END LOGGING ###")
+                else:
+                    self.outgoing_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
                 # done
                 pass
@@ -754,17 +829,7 @@ class Firewall:
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 self.incoming_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
-                # done
-                # run logging stuff
-                debug("logging")
-                log_line = get_http_log_data(self.incoming_stream, self.outgoing_stream)
-                
-                # check to make sure we only log the domain specified in the rules
-                if self.regex_interpreter(domain_name, log_line.split()[0]) != None:
-                    flog = open('http.log', 'a')
-                    flog.write(log_line)
-                    flog.flush();
-                    flog.close();
+                self.has_received_fin_ack = True
             else:
                 # error
                 pass
