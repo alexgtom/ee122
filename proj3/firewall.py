@@ -16,6 +16,11 @@ NO_MATCH = 3
 
 HEADER_DIVIDER = "\r\n\r\n"
 
+SYN = 0
+ACK = 1
+FIN_ACK = 2
+SYN_ACK = 3
+
 def debug(s):
     if DEBUG == True:
         print s
@@ -66,7 +71,7 @@ def get_header_tokens(data):
         dataheader = tokens.pop(0)
         content_length = get_content_length(prev_header)
         if content_length < 0:
-            continue
+            content_length = 0
         header = dataheader[content_length:]
         fixed_tokens.append(header)
         prev_header = header
@@ -78,13 +83,17 @@ def get_http_log_data(incoming_stream, outgoing_stream):
     debug_http("*** BEGIN INCOMING_STREAM ***\n" + incoming_stream + "\n*** END INCOMING STREAM ***")
     debug_http("*** BEGIN OUTGOING_STREAM ***\n" + outgoing_stream + "\n*** END OUTGOING STREAM ***")
     if not is_persistent_connection(outgoing_stream):
-        return [http_log_line(incoming_stream, outgoing_stream)]
+        try:
+            return [http_log_line(incoming_stream, outgoing_stream)]
+        except AttributeError:
+            return []
     
     # tokens are in format [header, data, header, data, ...]
     incoming_tokens = get_header_tokens(incoming_stream)
     outgoing_tokens = get_header_tokens(outgoing_stream)
 
-    #return []
+    if len(incoming_tokens) == 0 and len(outgoing_tokens) == 0:
+        return []
     
     assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
         "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
@@ -137,8 +146,8 @@ class Firewall:
         # http byte stream
         self.outgoing_stream = ""
         self.incoming_stream = ""
-        self.has_received_fin_ack = False
         self.expected_seqno = -1
+        self.last_msg_type = FIN_ACK
 
         # TODO: Also do some initialization if needed.
 
@@ -809,14 +818,14 @@ class Firewall:
         l = []
         if pkt_info['syn']:
             l.append("SYN")
-        if pkt_info['ack']:
-            l.append("ACK")
         if pkt_info['fin']:
             l.append("FIN")
+        if pkt_info['ack']:
+            l.append("ACK")
         debug_http(','.join(l))
         debug_http('seqno: ' + str(pkt_info['tcp_seqno']) + '   ackno: ' + str(pkt_info['tcp_ackno']))
         debug_http('src: ' + str(pkt_info['src_ip']) + ":" + str(pkt_info['tcp_src']) + '   dst: ' + str(pkt_info['dst_ip']) + ":" + str(pkt_info['tcp_dst']))
-        debug_http('data: ' + str(pkt_info['data']))
+        debug_http('data: ' + repr(pkt_info['data']))
         debug_http('expected_seqno: ' + str(self.expected_seqno))
 
         #debug_http("pkt_info: " + str(pkt_info))
@@ -827,14 +836,14 @@ class Firewall:
         if pkt_dir == PKT_DIR_OUTGOING:
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
                 # SYN
-                self.outgoing_stream = ""
                 self.expected_seqno = pkt_info['tcp_seqno']
                 self.increment_expected_seqno(1)
+                self.last_msg_type = SYN
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # ACK
                 self.increment_expected_seqno(len(pkt_info['data']))
 
-                if self.has_received_fin_ack == True:
+                if self.last_msg_type == FIN_ACK:
                     # close the connection if we recieved a fin ack
                     # run logging stuff
                     debug_http("### BEGIN LOGGING ###")
@@ -847,30 +856,38 @@ class Firewall:
                             flog.write(log_line + '\n')
                             flog.flush();
                             flog.close();
-                    self.has_received_fin_ack = False
+                    self.outgoing_stream = ""
+                    self.incoming_stream = ""
                     debug_http("### END LOGGING ###")
                 else:
                     self.outgoing_stream += pkt_info['data']
+
+                self.last_msg_type = ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
                 # FIN ACK
                 self.increment_expected_seqno(1)
-                pass
+                self.last_msg_type = FIN_ACK
             else:
                 # error
                 pass
         else:
-            if self.expected_seqno != pkt_info['tcp_ackno']:
+            if self.expected_seqno < pkt_info['tcp_ackno']:
+                # packet out of order
                 return DROP
+            elif self.expected_seqno > pkt_info['tcp_ackno']:
+                # packet retransmission
+                return PASS
 
             if pkt_info['syn'] == True and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # SYN ACK
-                self.incoming_stream = ""
+                self.last_msg_type = SYN_ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # ACK
                 self.incoming_stream += pkt_info['data']
+                self.last_msg_type = ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
                 # FIN ACK
-                self.has_received_fin_ack = True
+                self.last_msg_type = FIN_ACK
             else:
                 # error
                 pass
