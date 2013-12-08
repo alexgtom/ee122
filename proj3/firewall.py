@@ -8,7 +8,7 @@ import random
 import re
 
 DEBUG = False
-DEBUG_HTTP = False
+DEBUG_HTTP = True
 PASS = 0
 DROP = 1
 DENY = 2
@@ -55,7 +55,6 @@ def get_header_tokens(data):
 
     # tokens are in format [header, dataheader, dataheader, ... , data]
     tokens = data.split(HEADER_DIVIDER)
-    debug_http("***TOKENS " + str(tokens))
     fixed_tokens = []
     
     # append the first header
@@ -84,6 +83,8 @@ def get_http_log_data(incoming_stream, outgoing_stream):
     # tokens are in format [header, data, header, data, ...]
     incoming_tokens = get_header_tokens(incoming_stream)
     outgoing_tokens = get_header_tokens(outgoing_stream)
+
+    #return []
     
     assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
         "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
@@ -137,6 +138,7 @@ class Firewall:
         self.outgoing_stream = ""
         self.incoming_stream = ""
         self.has_received_fin_ack = False
+        self.expected_seqno = -1
 
         # TODO: Also do some initialization if needed.
 
@@ -457,7 +459,7 @@ class Firewall:
 
                 # write to log if tcp_src == 80 or tcp_dst == 80
                 if pkt_protocol == "tcp" and (pkt_info['tcp_src'] == 80 or pkt_info['tcp_dst'] == 80):
-                    self.handle_log(rule_tuple, pkt_dir, pkt_info, domain_name)
+                    return self.handle_log(rule_tuple, pkt_dir, pkt_info, domain_name), pkt_info
 
             #Handle DNS Rules
             elif len(rule_tuple) == 3 and pkt_protocol == "dns":
@@ -727,6 +729,8 @@ class Firewall:
             pkt_specs['syn'] = 0x2 & flags == 0x2
             pkt_specs['ack'] = 0x10 & flags == 0x10
             pkt_specs['data'] = pkt[protocol_header + offset:pkt_specs['total_len']]
+            pkt_specs['tcp_seqno'] = struct.unpack('!L', pkt[protocol_header + 4:protocol_header + 8])[0]
+            pkt_specs['tcp_ackno'] = struct.unpack('!L', pkt[protocol_header + 8:protocol_header + 12])[0]
 
             return "tcp"
 
@@ -791,15 +795,45 @@ class Firewall:
 
         return domain_name, qname_len + 1
 
+    def increment_expected_seqno(self, i):
+        self.expected_seqno = (self.expected_seqno + i) % (0xFFFFFFFF + 1)
+            
+
     def handle_log(self, rule_tuple, pkt_dir, pkt_info, domain_name):
-        debug_http("handle_log")
+        debug_http("*** handle_log")
         debug_http("rule_tuple: " + str(rule_tuple))
-        debug_http("pkt_dir: " + str(pkt_dir))
-        debug_http("pkt_info: " + str(pkt_info))
+        if pkt_dir == PKT_DIR_INCOMING:
+            debug_http("pkt_dir: " + str("INCOMING"))
+        else:
+            debug_http("pkt_dir: " + str("OUTGOING"))
+        l = []
+        if pkt_info['syn']:
+            l.append("SYN")
+        if pkt_info['ack']:
+            l.append("ACK")
+        if pkt_info['fin']:
+            l.append("FIN")
+        debug_http(','.join(l))
+        debug_http('seqno: ' + str(pkt_info['tcp_seqno']) + '   ackno: ' + str(pkt_info['tcp_ackno']))
+        debug_http('src: ' + str(pkt_info['src_ip']) + ":" + str(pkt_info['tcp_src']) + '   dst: ' + str(pkt_info['dst_ip']) + ":" + str(pkt_info['tcp_dst']))
+        debug_http('data: ' + str(pkt_info['data']))
+        debug_http('expected_seqno: ' + str(self.expected_seqno))
+
+        #debug_http("pkt_info: " + str(pkt_info))
+
+        pass_pkt = PASS
+
+
         if pkt_dir == PKT_DIR_OUTGOING:
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
+                # SYN
                 self.outgoing_stream = ""
+                self.expected_seqno = pkt_info['tcp_seqno']
+                self.increment_expected_seqno(1)
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                # ACK
+                self.increment_expected_seqno(len(pkt_info['data']))
+
                 if self.has_received_fin_ack == True:
                     # close the connection if we recieved a fin ack
                     # run logging stuff
@@ -810,7 +844,7 @@ class Firewall:
                         # check to make sure we only log the domain specified in the rules
                         if self.regex_interpreter(domain_name, log_line.split()[0]) != None:
                             flog = open('http.log', 'a')
-                            flog.write(log_line)
+                            flog.write(log_line + '\n')
                             flog.flush();
                             flog.close();
                     self.has_received_fin_ack = False
@@ -818,21 +852,30 @@ class Firewall:
                 else:
                     self.outgoing_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
-                # done
+                # FIN ACK
+                self.increment_expected_seqno(1)
                 pass
             else:
                 # error
                 pass
         else:
+            if self.expected_seqno != pkt_info['tcp_ackno']:
+                return DROP
+
             if pkt_info['syn'] == True and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                # SYN ACK
                 self.incoming_stream = ""
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
+                # ACK
                 self.incoming_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
+                # FIN ACK
                 self.has_received_fin_ack = True
             else:
                 # error
                 pass
+        
+        return pass_pkt
     
 
     # TODO: You can add more methods as you want.
