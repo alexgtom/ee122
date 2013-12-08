@@ -67,7 +67,7 @@ Content-Length: 219
 X-XSS-Protection: 1; mode=block
 X-Frame-Options: SAMEORIGIN
 Alternate-Protocol: 80:quic"""
-        self.assertEqual(get_http_log_data(response, request), "google.com GET / HTTP/1.1 301 219")
+        self.assertEqual(get_http_log_data(response, request)[0], "google.com GET / HTTP/1.1 301 219")
 
 if __name__ == '__main__':
     unittest.main()
