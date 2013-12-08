@@ -827,15 +827,19 @@ class Firewall:
         debug_http('seqno: ' + str(pkt_info['tcp_seqno']) + '   ackno: ' + str(pkt_info['tcp_ackno']))
         debug_http('src: ' + str(pkt_info['src_ip']) + ":" + str(pkt_info['tcp_src']) + '   dst: ' + str(pkt_info['dst_ip']) + ":" + str(pkt_info['tcp_dst']))
         debug_http('data: ' + repr(pkt_info['data']))
-        debug_http('expected_seqno: ' + str(self.expected_seqno))
 
         #debug_http("pkt_info: " + str(pkt_info))
 
-        pass_pkt = PASS
-
-
+        # determine stream_id
         if pkt_dir == PKT_DIR_OUTGOING:
             stream_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
+        else:
+            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
+
+        debug_http('expected_seqno: ' + str(self.expected_seqno[stream_id]))
+        pass_pkt = PASS
+
+        if pkt_dir == PKT_DIR_OUTGOING:
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
                 # SYN
                 self.expected_seqno[stream_id] = pkt_info['tcp_seqno']
@@ -873,7 +877,6 @@ class Firewall:
                 # error
                 pass
         else:
-            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
             if self.expected_seqno[stream_id] < pkt_info['tcp_ackno']:
                 # packet out of order
                 return DROP
