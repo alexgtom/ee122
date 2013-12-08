@@ -1,6 +1,7 @@
 #!/usr/bin/env python
 
 from main import PKT_DIR_INCOMING, PKT_DIR_OUTGOING
+from collections import defaultdict
 
 import struct
 import socket
@@ -55,51 +56,6 @@ def get_content_length(incoming_stream):
     else:
         return -1
 
-def get_header_tokens(data):
-    # this method will output tokens in format [header, header, header], the data is discarded
-
-    # tokens are in format [header, dataheader, dataheader, ... , data]
-    tokens = data.split(HEADER_DIVIDER)
-    fixed_tokens = []
-    
-    # append the first header
-    prev_header = tokens.pop(0)
-    fixed_tokens.append(prev_header)
-
-    # len(tokens) - 1 because the last token is data
-    for i in xrange(len(tokens)-1):
-        dataheader = tokens.pop(0)
-        content_length = get_content_length(prev_header)
-        if content_length < 0:
-            content_length = 0
-        header = dataheader[content_length:]
-        fixed_tokens.append(header)
-        prev_header = header
-
-    return fixed_tokens
-
-
-def get_http_log_data(incoming_stream, outgoing_stream):
-    debug_http("*** BEGIN INCOMING_STREAM ***\n" + incoming_stream + "\n*** END INCOMING STREAM ***")
-    debug_http("*** BEGIN OUTGOING_STREAM ***\n" + outgoing_stream + "\n*** END OUTGOING STREAM ***")
-    if not is_persistent_connection(outgoing_stream):
-        try:
-            return [http_log_line(incoming_stream, outgoing_stream)]
-        except AttributeError:
-            return []
-    
-    # tokens are in format [header, data, header, data, ...]
-    incoming_tokens = get_header_tokens(incoming_stream)
-    outgoing_tokens = get_header_tokens(outgoing_stream)
-
-    if len(incoming_tokens) == 0 and len(outgoing_tokens) == 0:
-        return []
-    
-    assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
-        "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
-
-    return [http_log_line(incoming_tokens[i], outgoing_tokens[i]) for i in xrange(len(incoming_tokens))]
-
 def is_persistent_connection(data):
     """ returns a boolean of whether or not the connection is persistent """
     return re.search('Connection: Keep-Alive', data, re.IGNORECASE) != None
@@ -144,10 +100,12 @@ class Firewall:
         self.geoIP = ips
 
         # http byte stream
-        self.outgoing_stream = ""
-        self.incoming_stream = ""
-        self.expected_seqno = -1
-        self.last_msg_type = FIN_ACK
+        self.outgoing_stream = defaultdict(str)
+        self.incoming_stream = defaultdict(str)
+        self.outgoing_packet_sizes = defaultdict(list)
+        self.incoming_packet_sizes = defaultdict(list)
+        self.expected_seqno = defaultdict(lambda: -1)
+        self.last_msg_type = defaultdict(lambda: FIN_ACK)
 
         # TODO: Also do some initialization if needed.
 
@@ -804,9 +762,54 @@ class Firewall:
 
         return domain_name, qname_len + 1
 
-    def increment_expected_seqno(self, i):
-        self.expected_seqno = (self.expected_seqno + i) % (0xFFFFFFFF + 1)
+    def increment_expected_seqno(self, stream_id, i):
+        self.expected_seqno[stream_id] = (self.expected_seqno[stream_id] + i) % (0xFFFFFFFF + 1)
             
+
+    def get_header_tokens(self, data):
+        # this method will output tokens in format [header, header, header], the data is discarded
+
+        # tokens are in format [header, dataheader, dataheader, ... , data]
+        tokens = data.split(HEADER_DIVIDER)
+        fixed_tokens = []
+        
+        # append the first header
+        prev_header = tokens.pop(0)
+        fixed_tokens.append(prev_header)
+
+        # len(tokens) - 1 because the last token is data
+        for i in xrange(len(tokens)-1):
+            dataheader = tokens.pop(0)
+            content_length = get_content_length(prev_header)
+            if content_length < 0:
+                content_length = 0
+            header = dataheader[content_length:]
+            fixed_tokens.append(header)
+            prev_header = header
+
+        return fixed_tokens
+
+
+    def get_http_log_data(self, incoming_stream, outgoing_stream):
+        debug_http("*** BEGIN INCOMING_STREAM ***\n" + incoming_stream + "\n*** END INCOMING STREAM ***")
+        debug_http("*** BEGIN OUTGOING_STREAM ***\n" + outgoing_stream + "\n*** END OUTGOING STREAM ***")
+        if not is_persistent_connection(outgoing_stream):
+            try:
+                return [http_log_line(incoming_stream, outgoing_stream)]
+            except AttributeError:
+                return []
+        
+        # tokens are in format [header, data, header, data, ...]
+        incoming_tokens = self.get_header_tokens(incoming_stream)
+        outgoing_tokens = self.get_header_tokens(outgoing_stream)
+
+        if len(incoming_tokens) == 0 and len(outgoing_tokens) == 0:
+            return []
+    
+        assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
+            "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
+
+        return [http_log_line(incoming_tokens[i], outgoing_tokens[i]) for i in xrange(len(incoming_tokens))]
 
     def handle_log(self, rule_tuple, pkt_dir, pkt_info, domain_name):
         debug_http("*** handle_log")
@@ -834,20 +837,21 @@ class Firewall:
 
 
         if pkt_dir == PKT_DIR_OUTGOING:
+            stream_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
                 # SYN
-                self.expected_seqno = pkt_info['tcp_seqno']
-                self.increment_expected_seqno(1)
-                self.last_msg_type = SYN
+                self.expected_seqno[stream_id] = pkt_info['tcp_seqno']
+                self.increment_expected_seqno(stream_id, 1)
+                self.last_msg_type[stream_id] = SYN
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # ACK
-                self.increment_expected_seqno(len(pkt_info['data']))
+                self.increment_expected_seqno(stream_id, len(pkt_info['data']))
 
-                if self.last_msg_type == FIN_ACK:
+                if self.last_msg_type[stream_id] == FIN_ACK:
                     # close the connection if we recieved a fin ack
                     # run logging stuff
                     debug_http("### BEGIN LOGGING ###")
-                    log_lines = get_http_log_data(self.incoming_stream, self.outgoing_stream)
+                    log_lines = get_http_log_data(self.incoming_stream[stream_id], self.outgoing_stream[stream_id])
                     
                     for log_line in log_lines:
                         # check to make sure we only log the domain specified in the rules
@@ -856,38 +860,43 @@ class Firewall:
                             flog.write(log_line + '\n')
                             flog.flush();
                             flog.close();
-                    self.outgoing_stream = ""
-                    self.incoming_stream = ""
+                    self.outgoing_stream[stream_id] = ""
+                    self.outgoing_packet_sizes[stream_id] = []
+                    self.incoming_stream[stream_id] = ""
+                    self.incoming_packet_sizes[stream_id] = []
                     debug_http("### END LOGGING ###")
                 else:
-                    self.outgoing_stream += pkt_info['data']
+                    self.outgoing_stream[stream_id] += pkt_info['data']
+                    self.outgoing_packets_sizes[stream_id] += len(pkt_info['data'])
 
-                self.last_msg_type = ACK
+                self.last_msg_type[stream_id] = ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
                 # FIN ACK
-                self.increment_expected_seqno(1)
-                self.last_msg_type = FIN_ACK
+                self.increment_expected_seqno(stream_id, 1)
+                self.last_msg_type[stream_id] = FIN_ACK
             else:
                 # error
                 pass
         else:
-            if self.expected_seqno < pkt_info['tcp_ackno']:
+            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
+            if self.expected_seqno[stream_id] < pkt_info['tcp_ackno']:
                 # packet out of order
                 return DROP
-            elif self.expected_seqno > pkt_info['tcp_ackno']:
+            elif self.expected_seqno[stream_id] > pkt_info['tcp_ackno']:
                 # packet retransmission
                 return PASS
 
             if pkt_info['syn'] == True and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # SYN ACK
-                self.last_msg_type = SYN_ACK
+                self.last_msg_type[stream_id] = SYN_ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
                 # ACK
-                self.incoming_stream += pkt_info['data']
-                self.last_msg_type = ACK
+                self.incoming_stream[stream_id] += pkt_info['data']
+                self.incoming_packet_sizes[stream_id] += len(pkt_info['data'])
+                self.last_msg_type[stream_id] = ACK
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
                 # FIN ACK
-                self.last_msg_type = FIN_ACK
+                self.last_msg_type[stream_id] = FIN_ACK
             else:
                 # error
                 pass
