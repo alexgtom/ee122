@@ -33,7 +33,7 @@ def http_log_line(incoming_stream, outgoing_stream):
     Returns the string to write to log file
     """
     outgoing_lines = [line.split() for line in outgoing_stream.split('\n')]
-    host_name = re.search(r"Host: (.*)", outgoing_stream).group(1)
+    host_name = re.search(r"Host: (.*)", outgoing_stream, re.IGNORECASE).group(1)
     method = outgoing_lines[0][0]
     path = outgoing_lines[0][1]
     version = outgoing_lines[0][2]
@@ -46,7 +46,7 @@ def http_log_line(incoming_stream, outgoing_stream):
 
 def get_content_length(incoming_stream):
     if 'Content-Length' in incoming_stream:
-        return int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
+        return int(re.search(r"Content-Length: (\d+)", incoming_stream, re.IGNORECASE).group(1))
     else:
         return -1
 
@@ -93,7 +93,7 @@ def get_http_log_data(incoming_stream, outgoing_stream):
 
 def is_persistent_connection(data):
     """ returns a boolean of whether or not the connection is persistent """
-    return re.search('Connection: Keep-Alive', data) != None
+    return re.search('Connection: Keep-Alive', data, re.IGNORECASE) != None
 
 def has_complete_header(data):
     """ tries to find a blank line, if there is one then we have the whole header """
