@@ -1,0 +1,18 @@
+Bells and Whistles 1: HTTP Object Size Distribution
+Jason Jia: ee122-ed
+Alex Tom: ee122-ki
+
+How long was the measurement period? How many packets did you measure in total?
+
+	We measured 13113 objects in total for 60 minutes
+
+What did you mostly do during the period?
+
+	At first I was just browsing Facebook, but I re-read the sepcs and realized that Facebook used HTTPS. So I made up for it by browsing reddit for the rest of the time and clicking on as many links as I could.
+
+What does the distribution look like? Why does it show such a distribution?
+	
+	The distrubtion is mostly unimodal and centered around 8-16KB. There is also a seperate peak at 1-2KB.
+	This makes sense if HTTP requests and responses are considered seperatly. HTTP should all be relatively the same size as they don't contain any data. Because they don't ccontain any data, they should also be relatively small objects as well. These HTTP requests cause the first peak at 1-2KB.
+	HTTP responses on the other hand are of variable length. Thus, they should be normally distributed and following a normal curve. If we ignore the peak at 1-2KB, this is exactly how the data behaves. Looking at HTTP requests and reponses in conjuction, the data shape that I got should be expected. It is follows a general normal curve with a secondary peak at the small end of the distribution.
+	

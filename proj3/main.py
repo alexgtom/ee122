@@ -7,9 +7,16 @@ import select
 import time
 import fcntl
 import struct
+from threading import Timer as T_time
 
 PKT_DIR_INCOMING = 0
 PKT_DIR_OUTGOING = 1
+
+def get_content_length(incoming_stream):
+    if 'Content-Length' in incoming_stream:
+        return int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
+    else:
+        return -1
 
 class EthernetInterface:
     MAX_FRAME = 1514
@@ -84,6 +91,14 @@ class PacketInterceptor:
     def __init__(self, config):
         sys.stdout.write('Initializing...')
         sys.stdout.flush()
+
+        # store packet sizes
+        self.time_elapsed = 0
+        self.pkt_size_data = dict()
+        self.pkt_size_data[0] = 0
+        for i in range (1, 12):
+            self.pkt_size_data[2^i] = 0
+        self.print_packet_data()
 
         self.setup_interfaces()
         self.get_mac_addrs()
@@ -181,6 +196,20 @@ class PacketInterceptor:
                 pkt = pkt[:ip_total_len]
 
             self.firewall.handle_packet(pkt_dir, pkt)
+
+            # record size of packet
+            self.pkt_size_data[(-1 * len(pkt) / 50) * -50] = self.pkt_size_data[(-1 * len(pkt) / 50) * -50] + 1
+
+    # print packet data size
+    def print_packet_data(self):
+        print "time elapsed: " + str(self.time_elapsed) + " minute(s)"
+        self.time_elapsed = self.time_elapsed + 1
+        print sorted(self.pkt_size_data.viewitems())
+        t = T_time(60.0, self.print_packet_data)
+        t.start()
+
+
+
 
 def print_usage():
     print >> sys.stderr, 'Invalid commandline options!'

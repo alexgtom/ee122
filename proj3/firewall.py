@@ -1,36 +1,20 @@
 #!/usr/bin/env python
 
 from main import PKT_DIR_INCOMING, PKT_DIR_OUTGOING
-from collections import defaultdict
 
 import struct
 import socket
 import random
 import re
 
-DEBUG = False
-DEBUG_HTTP = True
+DEBUG = True
+DEBUG_HTTP = False
 PASS = 0
 DROP = 1
 DENY = 2
 NO_MATCH = 3
 
 HEADER_DIVIDER = "\r\n\r\n"
-
-SYN = 0
-ACK = 1
-FIN_ACK = 2
-SYN_ACK = 3
-
-SETUP = 4
-DATA_TRANSFER = 5
-TEARDOWN = 6
-
-SENDING = 7
-RECEIVING = 8
-
-ACK_DATA = 9
-ACK_NO_DATA = 10
 
 def debug(s):
     if DEBUG == True:
@@ -49,46 +33,70 @@ def http_log_line(incoming_stream, outgoing_stream):
     Returns the string to write to log file
     """
     outgoing_lines = [line.split() for line in outgoing_stream.split('\n')]
-    host_name = re.search(r"Host: (.*)", outgoing_stream, re.IGNORECASE).group(1).strip()
-    method = outgoing_lines[0][0].strip()
-    path = outgoing_lines[0][1].strip()
-    version = outgoing_lines[0][2].strip()
+    host_name = re.search(r"Host: (.*)", outgoing_stream).group(1)
+    method = outgoing_lines[0][0]
+    path = outgoing_lines[0][1]
+    version = outgoing_lines[0][2]
 
     incoming_lines = [line.split() for line in incoming_stream.split('\n')]
-    status_code = incoming_lines[0][1].strip()
+    status_code = incoming_lines[0][1]
     content_length = get_content_length(incoming_stream)
 
     return "{} {} {} {} {} {}".format(host_name, method, path, version, status_code, content_length)
 
 def get_content_length(incoming_stream):
     if 'Content-Length' in incoming_stream:
-        return int(re.search(r"Content-Length: (\d+)", incoming_stream, re.IGNORECASE).group(1))
+        return int(re.search(r"Content-Length: (\d+)", incoming_stream).group(1))
     else:
         return -1
 
-def has_data(pkt_info):
-    return len(pkt_info['data']) > 0
+def get_header_tokens(data):
+    # this method will output tokens in format [header, header, header], the data is discarded
 
-def has_end_of_header(data):
-    return re.search(HEADER_DIVIDER, data) != None
+    # tokens are in format [header, dataheader, dataheader, ... , data]
+    tokens = data.split(HEADER_DIVIDER)
+    debug_http("***TOKENS " + str(tokens))
+    fixed_tokens = []
+    
+    # append the first header
+    prev_header = tokens.pop(0)
+    fixed_tokens.append(prev_header)
 
-def regex_interpreter(domain_name, pkt_domain_name):
-    #Check if two domain names match
-    pkt_domain_name = pkt_domain_name.lstrip("www.")
-    if domain_name == pkt_domain_name:
-        return True
+    # len(tokens) - 1 because the last token is data
+    for i in xrange(len(tokens)-1):
+        dataheader = tokens.pop(0)
+        content_length = get_content_length(prev_header)
+        if content_length < 0:
+            continue
+        header = dataheader[content_length:]
+        fixed_tokens.append(header)
+        prev_header = header
 
-    #Handle regex's
-    elif '*' in domain_name:
-        #Make sure regex is well formed
-        if '*' != domain_name[0]:
-            return None
-        else:
-            if domain_name[1:len(domain_name)] in pkt_domain_name:
-                return True
+    return fixed_tokens
 
-    else:
-        return None
+
+def get_http_log_data(incoming_stream, outgoing_stream):
+    debug_http("*** BEGIN INCOMING_STREAM ***\n" + incoming_stream + "\n*** END INCOMING STREAM ***")
+    debug_http("*** BEGIN OUTGOING_STREAM ***\n" + outgoing_stream + "\n*** END OUTGOING STREAM ***")
+    if not is_persistent_connection(outgoing_stream):
+        return [http_log_line(incoming_stream, outgoing_stream)]
+    
+    # tokens are in format [header, data, header, data, ...]
+    incoming_tokens = get_header_tokens(incoming_stream)
+    outgoing_tokens = get_header_tokens(outgoing_stream)
+    
+    assert len(incoming_tokens) == len(outgoing_tokens), str(len(incoming_tokens)) + " != " + str(len(outgoing_tokens)) + \
+        "\nINCOMING_TOKENS: " + str(incoming_tokens) + "\nOUTGOING_TOKENS: " + str(outgoing_tokens)
+
+    return [http_log_line(incoming_tokens[i], outgoing_tokens[i]) for i in xrange(len(incoming_tokens))]
+
+def is_persistent_connection(data):
+    """ returns a boolean of whether or not the connection is persistent """
+    return re.search('Connection: Keep-Alive', data) != None
+
+def has_complete_header(data):
+    """ tries to find a blank line, if there is one then we have the whole header """
+    return len(filter(lambda line: len(line.strip()) == 0, data.split('\n'))) > 0
 
 
 class Firewall:
@@ -126,9 +134,9 @@ class Firewall:
         self.geoIP = ips
 
         # http byte stream
-        self.expected_seqno = defaultdict(lambda: -1)
-        self.http_connections = defaultdict(lambda: HttpConnection())
-
+        self.outgoing_stream = ""
+        self.incoming_stream = ""
+        self.has_received_fin_ack = False
 
         # TODO: Also do some initialization if needed.
 
@@ -158,7 +166,10 @@ class Firewall:
             if protocol == "tcp":
                 #TODO: Send a TCP RST packet
                 packet = self.make_RST_pkt(pkt_info, pkt)
-                self.iface_ext.send_ip_packet(packet)
+                if pkt_dir == PKT_DIR_OUTGOING:
+                    self.iface_int.send_ip_packet(packet)
+                else:
+                    self.iface_ext.send_ip_packet(packet)
                 debug("DENY TCP")
             elif protocol == "dns":
                 #TODO: Send a DNS response packet
@@ -196,7 +207,7 @@ class Firewall:
         packet = packet[0:ip_header_len + 2] + dst_port + packet[ip_header_len + 4:]
 
         #Update sequence and ack number
-        new_seq_num = struct.pack('!L', 0x00000000)
+        new_seq_num = struct.pack('!L', 0)
         old_seq_num = struct.unpack('!L', packet[ip_header_len + 4:ip_header_len + 8])[0]
         new_ack_num = struct.pack('!L', old_seq_num + 1)
         packet = packet[0:ip_header_len + 4] + new_seq_num + packet[ip_header_len + 8:]
@@ -434,7 +445,11 @@ class Firewall:
                     debug(rule)
 
                 #If the protocol of the rule doesn't match current protocol, go to the next rule
-                if protocol != pkt_protocol:
+                if (protocol == "http") and (pkt_info['HTTP'] == True):
+                    http_rules = self.process_http_rules(verdict, protocol, ext_ip_address, ext_port)
+                    if http_rules != NO_MATCH:
+                        pass_pkt = http_rules
+                elif protocol != pkt_protocol:
                     continue
                 else:
                     # Process all Transport layer rules
@@ -449,8 +464,7 @@ class Firewall:
 
                 # write to log if tcp_src == 80 or tcp_dst == 80
                 if pkt_protocol == "tcp" and (pkt_info['tcp_src'] == 80 or pkt_info['tcp_dst'] == 80):
-                    return self.handle_log(rule_tuple, pkt_dir, pkt_info, domain_name), pkt_info
-
+                    self.handle_log(rule_tuple, pkt_dir, pkt_info, domain_name)
             #Handle DNS Rules
             elif len(rule_tuple) == 3 and pkt_protocol == "dns":
                 #Only consider well formed DNS requests
@@ -467,9 +481,11 @@ class Firewall:
                     return DROP, pkt_info
         return pass_pkt, pkt_info
 
+    def process_http_rules(self, verdict, protocol, hostname, path, pkt_info):
+        pass
 
-    def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port,
-                                pkt_info, pkt_dir):
+
+    def process_transport_rules(self, verdict, protocol, ext_ip_address, ext_port, pkt_info, pkt_dir):
         #Find the external port IP of the packet
         if pkt_dir == PKT_DIR_OUTGOING:
             pkt_ext_ip_address = pkt_info['dst_ip']
@@ -607,7 +623,7 @@ class Firewall:
 
 
     def process_dns_rules(self, verdict, domain_name, pkt_domain_name):
-        if regex_interpreter(domain_name, pkt_domain_name) != None:
+        if self.regex_interpreter(domain_name, pkt_domain_name) != None:
             debug("Domain name matches")
             if verdict == "pass":
                 return PASS
@@ -620,6 +636,23 @@ class Firewall:
             # no dns rules match
             return NO_MATCH
 
+
+    def regex_interpreter(self, domain_name, pkt_domain_name):
+        #Check if two domain names match
+        if domain_name == pkt_domain_name:
+            return True
+
+        #Handle regex's
+        elif '*' in domain_name:
+            #Make sure regex is well formed
+            if '*' != domain_name[0]:
+                return None
+            else:
+                if domain_name[1:len(domain_name)] in pkt_domain_name:
+                    return True
+
+        else:
+            return None
 
 
     """
@@ -693,6 +726,8 @@ class Firewall:
                 self.compute_transport_checksum(pkt)
             pkt_specs['tcp_src'] = struct.unpack('!H', pkt[protocol_header:protocol_header + 2])[0]
             pkt_specs['tcp_dst'] = struct.unpack('!H', pkt[protocol_header + 2:protocol_header + 4])[0]
+            if (pkt_specs['tcp_dst'] == 80) or (pkt_specs['tcp_src'] == 80):
+                pkt_specs['HTTP'] = True
             flags = struct.unpack('!B', pkt[protocol_header + 13:protocol_header + 14])[0]
             offset_reserve = struct.unpack('!B', pkt[protocol_header + 12:protocol_header + 13])[0]
             # offset is number of 32-bit words in header
@@ -702,8 +737,6 @@ class Firewall:
             pkt_specs['syn'] = 0x2 & flags == 0x2
             pkt_specs['ack'] = 0x10 & flags == 0x10
             pkt_specs['data'] = pkt[protocol_header + offset:pkt_specs['total_len']]
-            pkt_specs['tcp_seqno'] = struct.unpack('!L', pkt[protocol_header + 4:protocol_header + 8])[0]
-            pkt_specs['tcp_ackno'] = struct.unpack('!L', pkt[protocol_header + 8:protocol_header + 12])[0]
 
             return "tcp"
 
@@ -768,195 +801,50 @@ class Firewall:
 
         return domain_name, qname_len + 1
 
-    def increment_expected_seqno(self, stream_id, i):
-        self.expected_seqno[stream_id] = (self.expected_seqno[stream_id] + i) % (0xFFFFFFFF + 1)
-
     def handle_log(self, rule_tuple, pkt_dir, pkt_info, domain_name):
-        debug_http("*** handle_log")
+        debug_http("handle_log")
         debug_http("rule_tuple: " + str(rule_tuple))
-        if pkt_dir == PKT_DIR_INCOMING:
-            debug_http("pkt_dir: " + str("INCOMING"))
-        else:
-            debug_http("pkt_dir: " + str("OUTGOING"))
-        l = []
-        if pkt_info['syn']:
-            l.append("SYN")
-        if pkt_info['fin']:
-            l.append("FIN")
-        if pkt_info['ack']:
-            l.append("ACK")
-        debug_http(','.join(l))
-        debug_http('seqno: ' + str(pkt_info['tcp_seqno']) + '   ackno: ' + str(pkt_info['tcp_ackno']))
-        debug_http('src: ' + str(pkt_info['src_ip']) + ":" + str(pkt_info['tcp_src']) + '   dst: ' + str(pkt_info['dst_ip']) + ":" + str(pkt_info['tcp_dst']))
-        debug_http('data: ' + repr(pkt_info['data']))
-
-        #debug_http("pkt_info: " + str(pkt_info))
-
-        # determine stream_id
-        if pkt_dir == PKT_DIR_OUTGOING:
-            stream_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'], pkt_dir)
-        else:
-            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'], pkt_dir)
-
-        debug_http('expected_seqno: ' + str(self.expected_seqno[stream_id]))
-        pass_pkt = PASS
-
-        if pkt_dir == PKT_DIR_OUTGOING:
-            conn_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
-        else:
-            conn_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
-        debug_http("conn_id: " + str(conn_id))
-        http_conn = self.http_connections[conn_id]
-
+        debug_http("pkt_dir: " + str(pkt_dir))
+        debug_http("pkt_info: " + str(pkt_info))
         if pkt_dir == PKT_DIR_OUTGOING:
             if pkt_info['syn'] == True and pkt_info['ack'] == False and pkt_info['fin'] == False:
-                # SYN
-                self.expected_seqno[stream_id] = pkt_info['tcp_seqno']
-                self.increment_expected_seqno(stream_id, 1)
+                self.outgoing_stream = ""
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
-                # ACK
-                self.increment_expected_seqno(stream_id, len(pkt_info['data']))
-                http_conn.handle_ack(pkt_info, pkt_dir, domain_name)
-
-
+                if self.has_received_fin_ack == True:
+                    # close the connection if we recieved a fin ack
+                    # run logging stuff
+                    debug_http("### BEGIN LOGGING ###")
+                    log_lines = get_http_log_data(self.incoming_stream, self.outgoing_stream)
+                    
+                    for log_line in log_lines:
+                        # check to make sure we only log the domain specified in the rules
+                        if self.regex_interpreter(domain_name, log_line.split()[0]) != None:
+                            flog = open('http.log', 'a')
+                            flog.write(log_line)
+                            flog.flush();
+                            flog.close();
+                    self.has_received_fin_ack = False
+                    debug_http("### END LOGGING ###")
+                else:
+                    self.outgoing_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
-                # FIN ACK
-                # log http
-
-                self.increment_expected_seqno(stream_id, 1)
+                # done
+                pass
             else:
                 # error
                 pass
         else:
-            if self.expected_seqno[stream_id] >= 0:
-                if self.expected_seqno[stream_id] < pkt_info['tcp_ackno']:
-                    # packet out of order
-                    return DROP
-                elif self.expected_seqno[stream_id] > pkt_info['tcp_ackno']:
-                    # packet retransmission
-                    return PASS 
-
             if pkt_info['syn'] == True and pkt_info['ack'] == True and pkt_info['fin'] == False:
-                # SYN ACK
-                pass
+                self.incoming_stream = ""
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == False:
-                # ACK
-                http_conn.handle_ack(pkt_info, pkt_dir, domain_name)
-
+                self.incoming_stream += pkt_info['data']
             elif pkt_info['syn'] == False and pkt_info['ack'] == True and pkt_info['fin'] == True:
-                # FIN ACK
-                #for conn in self.http_connections.values():
-                #    conn.write_to_log(domain_name)
-                #del self.http_connections[conn_id]
-                pass
+                self.has_received_fin_ack = True
             else:
                 # error
                 pass
+    
 
-        
-        return pass_pkt
+    # TODO: You can add more methods as you want.
 
-
-class HttpConnection(object):
-    def __init__(self):
-        self.reset()
-
-    def reset(self):
-        self.incoming_buffer = ""
-        self.incoming_headers = []
-
-        self.outgoing_buffer = ""
-        self.outgoing_headers = []
-
-        self.incoming_has_header = False
-        self.outgoing_has_header = False
-        self.prev_msg_state = None
-        self.prev_had_data = False
-        self.prev_dir = PKT_DIR_INCOMING
-
-    def append_to_incoming_buffer(self, s):
-        self.incoming_buffer += s
-
-    def append_to_outgoing_buffer(self, s):
-        self.outgoing_buffer += s
-
-    def get_header_and_clear_incoming_buffer(self):
-        self.incoming_headers.append(self.incoming_buffer.split(HEADER_DIVIDER)[0])
-        print "incoming_headers: " + repr(self.incoming_headers)
-        print "outgoing_headers: " + repr(self.outgoing_headers)
-        self.incoming_buffer = ""
-
-    def get_header_and_clear_outgoing_buffer(self):
-        self.outgoing_headers.append(self.outgoing_buffer.split(HEADER_DIVIDER)[0])
-        print "incoming_headers: " + repr(self.incoming_headers)
-        print "outgoing_headers: " + repr(self.outgoing_headers)
-        self.outgoing_buffer = ""
-
-    def write_to_log(self, domain_name):
-        assert len(self.incoming_headers) == len(self.outgoing_headers), str(len(self.incoming_headers)) + " != " + str(len(self.outgoing_headers)) \
-            + "INCOMING HEADERS: " + str(self.incoming_headers) + "\nOUTGOING HEADERS: " + str(self.outgoing_headers)
-
-        log_lines = [http_log_line(self.incoming_headers[i], self.outgoing_headers[i]) for i in xrange(len(self.incoming_headers))]
-
-        for log_line in log_lines:
-            # check to make sure we only log the domain specified in the rules
-            if regex_interpreter(domain_name, log_line.split()[0]) != None:
-                flog = open('http.log', 'a')
-                flog.write(log_line + '\n')
-                flog.flush()
-                flog.close()
-
-        self.reset()
-
-    def handle_ack(self, pkt_info, pkt_dir, domain_name):
-
-        if pkt_dir == PKT_DIR_OUTGOING:
-            if has_data(pkt_info):
-                print "\n*** OUTGOING DATA ***\n" + repr(pkt_info['data'])
-
-                if self.prev_msg_state == RECEIVING:
-                    self.outgoing_has_header = False
-                
-                if self.outgoing_has_header == False:
-                    self.append_to_outgoing_buffer(pkt_info['data'])
-
-                if has_end_of_header(pkt_info['data']) and self.outgoing_has_header == False:
-                    self.get_header_and_clear_outgoing_buffer()
-                    self.outgoing_has_header = True
-
-                print "prev_msg_state: " + str(self.prev_msg_state)
-                print "outgoing_has_header: " + str(self.outgoing_has_header)
-                
-                self.prev_msg_state = SENDING
-        else:
-            if has_data(pkt_info):
-                print "\n*** INCOMING DATA ***\n" + repr(pkt_info['data'])
-
-                if self.prev_msg_state == SENDING:
-                    self.incoming_has_header = False
-                
-                if self.incoming_has_header == False:
-                    self.append_to_incoming_buffer(pkt_info['data'])
-
-                if has_end_of_header(pkt_info['data']) and self.incoming_has_header == False:
-                    self.get_header_and_clear_incoming_buffer()
-                    self.incoming_has_header = True
-
-                print "prev_msg_state: " + str(self.prev_msg_state)
-                print "incoming_has_header: " + str(self.incoming_has_header)
-
-                self.prev_msg_state = RECEIVING
-            
-            if len(self.incoming_headers) == 1 and len(self.outgoing_headers) == 1:
-                self.write_to_log(domain_name)
-
-
-        if pkt_dir == PKT_DIR_OUTGOING:
-            if has_data(pkt_info) == True and self.prev_had_data == True and self.prev_dir == PKT_DIR_INCOMING:
-                self.write_to_log(domain_name)
-            pass
-        else:
-            pass
-        
-        self.prev_dir = pkt_dir
-        self.prev_had_data = has_data(pkt_info)
+# TODO: You may want to add more classes/functions as well.
