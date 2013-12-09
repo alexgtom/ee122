@@ -9,7 +9,7 @@ import random
 import re
 
 DEBUG = False
-DEBUG_HTTP = True
+DEBUG_HTTP = False
 PASS = 0
 DROP = 1
 DENY = 2
@@ -470,7 +470,7 @@ class Firewall:
                         debug("Pass pkt: " + str(dns_rules))
                         pass_pkt = dns_rules
                 else:
-                    print "invalid dns"
+                    #print "invalid dns"
                     return DROP, pkt_info
         return pass_pkt, pkt_info
 
@@ -743,7 +743,7 @@ class Firewall:
                         pkt_specs['dns_qtype'] = struct.unpack('!H', pkt[DNS_qtype_location:DNS_qtype_location + 2])[0]
                         pkt_specs['dns_qclass'] = struct.unpack('!H', pkt[DNS_qtype_location + 2:DNS_qtype_location + 4])[0]
                 except Exception:
-                    print 'throwing an exception'
+                    #print 'throwing an exception'
                     pkt_specs['valid_dns'] = False
                 return "dns"
 
@@ -894,14 +894,14 @@ class HttpConnection(object):
 
     def get_header_and_clear_incoming_buffer(self):
         self.incoming_headers.append(self.incoming_buffer.split(HEADER_DIVIDER)[0])
-        print "incoming_headers: " + repr(self.incoming_headers)
-        print "outgoing_headers: " + repr(self.outgoing_headers)
+        debug_http("incoming_headers: " + repr(self.incoming_headers))
+        debug_http("outgoing_headers: " + repr(self.outgoing_headers))
         self.incoming_buffer = ""
 
     def get_header_and_clear_outgoing_buffer(self):
         self.outgoing_headers.append(self.outgoing_buffer.split(HEADER_DIVIDER)[0])
-        print "incoming_headers: " + repr(self.incoming_headers)
-        print "outgoing_headers: " + repr(self.outgoing_headers)
+        debug_http("incoming_headers: " + repr(self.incoming_headers))
+        debug_http("outgoing_headers: " + repr(self.outgoing_headers))
         self.outgoing_buffer = ""
 
     def write_to_log(self, domain_name):
@@ -924,7 +924,7 @@ class HttpConnection(object):
 
         if pkt_dir == PKT_DIR_OUTGOING:
             if has_data(pkt_info):
-                print "\n*** OUTGOING DATA ***\n" + repr(pkt_info['data'])
+                debug_http("\n*** OUTGOING DATA ***\n" + repr(pkt_info['data']))
 
                 if self.prev_msg_state == RECEIVING:
                     self.outgoing_has_header = False
@@ -936,13 +936,13 @@ class HttpConnection(object):
                     self.get_header_and_clear_outgoing_buffer()
                     self.outgoing_has_header = True
 
-                print "prev_msg_state: " + str(self.prev_msg_state)
-                print "outgoing_has_header: " + str(self.outgoing_has_header)
+                debug_http("prev_msg_state: " + str(self.prev_msg_state))
+                debug_http("outgoing_has_header: " + str(self.outgoing_has_header))
                 
                 self.prev_msg_state = SENDING
         else:
             if has_data(pkt_info):
-                print "\n*** INCOMING DATA ***\n" + repr(pkt_info['data'])
+                debug_http("\n*** INCOMING DATA ***\n" + repr(pkt_info['data']))
 
                 if self.prev_msg_state == SENDING:
                     self.incoming_has_header = False
@@ -954,8 +954,8 @@ class HttpConnection(object):
                     self.get_header_and_clear_incoming_buffer()
                     self.incoming_has_header = True
 
-                print "prev_msg_state: " + str(self.prev_msg_state)
-                print "incoming_has_header: " + str(self.incoming_has_header)
+                debug_http("prev_msg_state: " + str(self.prev_msg_state))
+                debug_http("incoming_has_header: " + str(self.incoming_has_header))
 
                 self.prev_msg_state = RECEIVING
             
