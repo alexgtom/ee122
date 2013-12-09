@@ -74,6 +74,7 @@ def has_end_of_header(data):
 
 def regex_interpreter(domain_name, pkt_domain_name):
     #Check if two domain names match
+    pkt_domain_name = pkt_domain_name.lstrip("www.")
     if domain_name == pkt_domain_name:
         return True
 
