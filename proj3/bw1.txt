@@ -1,16 +1,18 @@
-Bells and Whistles 1: Packet Size Distribution
+Bells and Whistles 1: HTTP Object Size Distribution
 Jason Jia: ee122-ed
 Alex Tom: ee122-ki
 
 How long was the measurement period? How many packets did you measure in total?
 
-	We measured 92639 packets in total for 30 minutes
+	We measured 13113 objects in total for 60 minutes
 
 What did you mostly do during the period?
 
-	At first we tried watching Youtube videos (I would not recommend this). But, each video took a while to buffer and loaded slowly. So, after a while we just browsed reddit and 9gag.
+	At first I was just browsing Facebook, but I re-read the sepcs and realized that Facebook used HTTPS. So I made up for it by browsing reddit for the rest of the time and clicking on as many links as I could.
 
 What does the distribution look like? Why does it show such a distribution?
 	
-	The distrubtion shows two clear peaks at the small and large end in terms of packet sizes. It shows this ditribution because the smaller packets (1 - 100B) are probably all SYN's, ACK's, get requests, etc. These small packets represent the overhead in setting up connections between other servers and transmitting information. There a lot of these packets since they are required everytime we visited a new website or loaded a new image.
-	There is another peak in the 1451 - 1500B bucket. This makes sense since after the connection is set up, most packets that are trasnmitted will be filled with information and thus take up the maximum possible size of the packet. There are a lot of these because we needed a lot of information to stream Youtube videos and display the pictures on reddit andd 9gag.
+	The distrubtion is mostly unimodal and centered around 8-16KB. There is also a seperate peak at 1-2KB.
+	This makes sense if HTTP requests and responses are considered seperatly. HTTP should all be relatively the same size as they don't contain any data. Because they don't ccontain any data, they should also be relatively small objects as well. These HTTP requests cause the first peak at 1-2KB.
+	HTTP responses on the other hand are of variable length. Thus, they should be normally distributed and following a normal curve. If we ignore the peak at 1-2KB, this is exactly how the data behaves. Looking at HTTP requests and reponses in conjuction, the data shape that I got should be expected. It is follows a general normal curve with a secondary peak at the small end of the distribution.
+	
