@@ -197,8 +197,8 @@ class PacketInterceptor:
 
             self.firewall.handle_packet(pkt_dir, pkt)
 
-            # record size of packet
-            self.pkt_size_data[(-1 * len(pkt) / 50) * -50] = self.pkt_size_data[(-1 * len(pkt) / 50) * -50] + 1
+            ## record size of packet
+            #self.pkt_size_data[(-1 * len(pkt) / 50) * -50] = self.pkt_size_data[(-1 * len(pkt) / 50) * -50] + 1
 
     # print packet data size
     def print_packet_data(self):

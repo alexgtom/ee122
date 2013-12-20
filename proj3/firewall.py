@@ -806,17 +806,17 @@ class Firewall:
 
         # determine stream_id
         if pkt_dir == PKT_DIR_OUTGOING:
-            stream_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'], pkt_dir)
+            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
         else:
-            stream_id = (pkt_info['src_ip'], pkt_info['tcp_src'], pkt_dir)
+            stream_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
 
         debug_http('expected_seqno: ' + str(self.expected_seqno[stream_id]))
         pass_pkt = PASS
 
         if pkt_dir == PKT_DIR_OUTGOING:
-            conn_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
-        else:
             conn_id = (pkt_info['src_ip'], pkt_info['tcp_src'])
+        else:
+            conn_id = (pkt_info['dst_ip'], pkt_info['tcp_dst'])
         debug_http("conn_id: " + str(conn_id))
         http_conn = self.http_connections[conn_id]
 
@@ -926,49 +926,55 @@ class HttpConnection(object):
             if has_data(pkt_info):
                 debug_http("\n*** OUTGOING DATA ***\n" + repr(pkt_info['data']))
 
-                if self.prev_msg_state == RECEIVING:
-                    self.outgoing_has_header = False
+                #if self.prev_msg_state == RECEIVING:
+                #    self.outgoing_has_header = False
                 
                 if self.outgoing_has_header == False:
                     self.append_to_outgoing_buffer(pkt_info['data'])
 
                 if has_end_of_header(pkt_info['data']) and self.outgoing_has_header == False:
-                    self.get_header_and_clear_outgoing_buffer()
+                    #self.get_header_and_clear_outgoing_buffer()
                     self.outgoing_has_header = True
 
                 debug_http("prev_msg_state: " + str(self.prev_msg_state))
                 debug_http("outgoing_has_header: " + str(self.outgoing_has_header))
                 
-                self.prev_msg_state = SENDING
+                #self.prev_msg_state = SENDING
         else:
             if has_data(pkt_info):
                 debug_http("\n*** INCOMING DATA ***\n" + repr(pkt_info['data']))
 
-                if self.prev_msg_state == SENDING:
-                    self.incoming_has_header = False
+                #if self.prev_msg_state == SENDING:
+                #    self.incoming_has_header = False
                 
                 if self.incoming_has_header == False:
                     self.append_to_incoming_buffer(pkt_info['data'])
 
                 if has_end_of_header(pkt_info['data']) and self.incoming_has_header == False:
-                    self.get_header_and_clear_incoming_buffer()
+                    #self.get_header_and_clear_incoming_buffer()
                     self.incoming_has_header = True
 
                 debug_http("prev_msg_state: " + str(self.prev_msg_state))
                 debug_http("incoming_has_header: " + str(self.incoming_has_header))
 
-                self.prev_msg_state = RECEIVING
+                #self.prev_msg_state = RECEIVING
             
-            if len(self.incoming_headers) == 1 and len(self.outgoing_headers) == 1:
-                self.write_to_log(domain_name)
+            #if len(self.incoming_headers) == 1 and len(self.outgoing_headers) == 1:
+            #    self.write_to_log(domain_name)
 
+        
+        if has_end_of_header(self.incoming_buffer) and has_end_of_header(self.outgoing_buffer):
+            self.incoming_headers = [self.incoming_buffer]
+            self.outgoing_headers = [self.outgoing_buffer]
 
-        if pkt_dir == PKT_DIR_OUTGOING:
-            if has_data(pkt_info) == True and self.prev_had_data == True and self.prev_dir == PKT_DIR_INCOMING:
-                self.write_to_log(domain_name)
-            pass
-        else:
-            pass
+            self.write_to_log(domain_name)
+
+        #if pkt_dir == PKT_DIR_OUTGOING:
+        #    if has_data(pkt_info) == True and self.prev_had_data == True and self.prev_dir == PKT_DIR_INCOMING:
+        #        self.write_to_log(domain_name)
+        #    pass
+        #else:
+        #    pass
         
         self.prev_dir = pkt_dir
         self.prev_had_data = has_data(pkt_info)
